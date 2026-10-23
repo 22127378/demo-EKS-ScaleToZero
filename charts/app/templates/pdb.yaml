@@ -1,0 +1,16 @@
+{{- if .Values.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "app.name" . }}
+  labels: {{- include "app.labels" . | nindent 4 }}
+spec:
+  {{- /* With a single pod, minAvailable: 1 would block node drains, so use maxUnavailable instead */}}
+  {{- if ge (int (include "app.minReplicas" .)) 2 }}
+  minAvailable: 1
+  {{- else }}
+  maxUnavailable: 1
+  {{- end }}
+  selector:
+    matchLabels: {{- include "app.selector" . | nindent 6 }}
+{{- end }}

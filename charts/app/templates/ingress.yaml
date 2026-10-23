@@ -1,0 +1,61 @@
+{{- if .Values.ingress.enabled }}
+{{- $mode := include "app.mode" . }}
+{{- $http := eq $mode "http" }}
+{{- if and $http (not .Values.ingress.host) }}
+{{- fail "scaling.mode=http requires ingress.host (the interceptor routes by Host header)" }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "app.name" . }}
+  {{- /* An ingress for a scale-to-zero app must live in the same namespace as the interceptor service */}}
+  {{- if $http }}
+  namespace: {{ .Values.scaling.http.interceptorNamespace }}
+  {{- end }}
+  labels: {{- include "app.labels" . | nindent 4 }}
+  annotations:
+    alb.ingress.kubernetes.io/group.name: {{ .Values.ingress.groupName }}
+    alb.ingress.kubernetes.io/scheme: {{ .Values.ingress.scheme }}
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "10"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
+    {{- if $http }}
+    {{- /* TODO(PLAN.md step 6): verify the ALB health check for the interceptor (admin port 9090, /livez) */}}
+    alb.ingress.kubernetes.io/healthcheck-port: "9090"
+    alb.ingress.kubernetes.io/healthcheck-path: /livez
+    {{- else }}
+    alb.ingress.kubernetes.io/healthcheck-path: {{ include "app.hcPath" . | quote }}
+    {{- end }}
+    {{- if .Values.ingress.certificateArn }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.certificateArn }}
+    {{- else }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - {{- if .Values.ingress.host }}
+      host: {{ .Values.ingress.host }}
+      {{- end }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.path }}
+            pathType: {{ .Values.ingress.pathType }}
+            backend:
+              service:
+                {{- if $http }}
+                name: {{ .Values.scaling.http.interceptorService }}
+                port:
+                  number: {{ .Values.scaling.http.interceptorPort }}
+                {{- else }}
+                name: {{ include "app.name" . }}
+                port:
+                  number: {{ .Values.service.port }}
+                {{- end }}
+{{- end }}

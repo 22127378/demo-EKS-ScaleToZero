@@ -1,0 +1,12 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+# Node / Go
+node_modules/
+dist/
+bin/
+# Misc
+.DS_Store

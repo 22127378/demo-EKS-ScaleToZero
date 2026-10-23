@@ -1,0 +1,14 @@
+# API: KEDA HTTP, scales 0..2. ingress.host is required (the interceptor routes by Host header)
+image:
+  repository: hashicorp/http-echo   # replace with .../demo-api after PLAN.md step 6
+  tag: latest
+arch: auto
+containerPort: 5678
+args: ["-text=hello from api"]
+nodePool: default
+scaling:
+  mode: http
+  http: { min: 0, max: 2, scaledownPeriod: 300 }
+ingress:
+  host: api.demo.local
+  path: /

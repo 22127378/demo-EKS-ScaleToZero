@@ -1,0 +1,21 @@
+{{- if eq (include "app.mode" .) "hpa" }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "app.name" . }}
+  labels: {{- include "app.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "app.name" . }}
+  minReplicas: {{ .Values.scaling.hpa.min }}
+  maxReplicas: {{ .Values.scaling.hpa.max }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.scaling.hpa.cpu }}
+{{- end }}

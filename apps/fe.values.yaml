@@ -1,0 +1,13 @@
+# FE: HPA 1..2. The demo image is multi-arch -> arch: auto
+image:
+  repository: nginx          # replace with <account>.dkr.ecr.<region>.amazonaws.com/demo-web after PLAN.md step 6
+  tag: latest
+arch: auto
+containerPort: 80
+nodePool: default
+scaling:
+  mode: hpa
+  hpa: { min: 1, max: 2, cpu: 60 }
+ingress:
+  host: ""                   # empty = match any host (use the ALB DNS name)
+  path: /

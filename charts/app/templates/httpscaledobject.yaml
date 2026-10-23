@@ -1,0 +1,27 @@
+{{- if eq (include "app.mode" .) "http" }}
+{{- /* TODO(PLAN.md step 6): verify the HTTPScaledObject schema against the installed HTTP Add-on version */}}
+apiVersion: http.keda.sh/v1alpha1
+kind: HTTPScaledObject
+metadata:
+  name: {{ include "app.name" . }}
+  labels: {{- include "app.labels" . | nindent 4 }}
+spec:
+  hosts:
+    - {{ required "ingress.host is required when scaling.mode=http" .Values.ingress.host }}
+  scaleTargetRef:
+    name: {{ include "app.name" . }}
+    kind: Deployment
+    apiVersion: apps/v1
+    service: {{ include "app.name" . }}
+    port: {{ .Values.service.port }}
+  replicas:
+    min: {{ .Values.scaling.http.min }}
+    max: {{ .Values.scaling.http.max }}
+  scaledownPeriod: {{ .Values.scaling.http.scaledownPeriod }}
+  scalingMetric:
+    concurrency:
+      targetValue: {{ .Values.scaling.http.targetConcurrency }}
+  timeouts:
+    conditionWait: {{ .Values.scaling.http.requestTimeout }}
+    responseHeader: {{ .Values.scaling.http.requestTimeout }}
+{{- end }}

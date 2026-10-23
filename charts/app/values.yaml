@@ -1,0 +1,84 @@
+# ---- Edit only these fields to plug in any image ----
+image:
+  repository: nginx
+  tag: latest
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# auto = no constraint (only for multi-arch images). amd64 | arm64 = pin the architecture.
+# Run scripts/detect-arch.sh <image:tag> to find the right value.
+arch: auto
+
+containerPort: 80
+command: []        # override ENTRYPOINT
+args: []           # override CMD
+env: {}            # KEY: value
+envFrom: []        # - secretRef: {name: x}
+serviceAccountName: ""   # used for Pod Identity (e.g. the api sending to SQS)
+securityContext: {}      # nothing enforced by default so unfamiliar images do not break
+
+# Probe: TCP by default (works with any image). Set httpPath to use HTTP instead.
+probe:
+  httpPath: ""     # e.g. /healthz
+  initialDelaySeconds: 2
+  periodSeconds: 5
+
+resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits: { memory: 512Mi }
+
+# Only used when scaling.mode = none
+replicas: 1
+
+# default (spot) or worker (spot, tainted workload=worker)
+nodePool: default
+
+service:
+  port: 80
+
+# ALB ingress. Several apps share one ALB through group.name
+ingress:
+  enabled: true
+  className: alb
+  groupName: demo
+  scheme: internet-facing
+  host: ""            # REQUIRED when scaling.mode = http
+  path: /
+  pathType: Prefix
+  healthcheckPath: "" # defaults to probe.httpPath, or "/"
+  certificateArn: ""  # if set -> enable HTTPS 443 + redirect 80
+  annotations: {}
+
+# Pick exactly ONE scaling controller:
+#   none : fixed .replicas
+#   hpa  : HPA on CPU
+#   http : KEDA HTTP Add-on (scales to zero, ingress goes through the interceptor)
+#   sqs  : KEDA on SQS queue length
+scaling:
+  mode: hpa
+  hpa:
+    min: 1
+    max: 2
+    cpu: 60
+  http:
+    min: 0
+    max: 2
+    scaledownPeriod: 300        # seconds without requests before scaling to zero
+    targetConcurrency: 10       # concurrent requests per pod
+    requestTimeout: 120s        # how long the interceptor holds a request while waiting for a pod
+    interceptorNamespace: keda
+    interceptorService: keda-add-ons-http-interceptor-proxy
+    interceptorPort: 8080
+  sqs:
+    queueURL: ""
+    region: ap-southeast-1
+    queueLength: "5"
+    min: 0
+    max: 20
+    pollingInterval: 10
+    cooldownPeriod: 60
+
+pdb:
+  enabled: true
+
+terminationGracePeriodSeconds: 30

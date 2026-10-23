@@ -1,0 +1,33 @@
+{{- if eq (include "app.mode" .) "sqs" }}
+{{- /* The KEDA operator reads the queue length with its own IAM role (Pod Identity, created in Terraform) */}}
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: {{ include "app.name" . }}-aws
+  labels: {{- include "app.labels" . | nindent 4 }}
+spec:
+  podIdentity:
+    provider: aws
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "app.name" . }}
+  labels: {{- include "app.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: {{ include "app.name" . }}
+  minReplicaCount: {{ .Values.scaling.sqs.min }}
+  maxReplicaCount: {{ .Values.scaling.sqs.max }}
+  pollingInterval: {{ .Values.scaling.sqs.pollingInterval }}
+  cooldownPeriod: {{ .Values.scaling.sqs.cooldownPeriod }}
+  triggers:
+    - type: aws-sqs-queue
+      authenticationRef:
+        name: {{ include "app.name" . }}-aws
+      metadata:
+        queueURL: {{ required "scaling.sqs.queueURL is required" .Values.scaling.sqs.queueURL | quote }}
+        queueLength: {{ .Values.scaling.sqs.queueLength | quote }}
+        awsRegion: {{ .Values.scaling.sqs.region | quote }}
+        identityOwner: operator
+{{- end }}

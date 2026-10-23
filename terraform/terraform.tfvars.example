@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars (git-ignored) and adjust. Every value shown is optional.
+region       = "ap-southeast-1"
+cluster_name = "demo"
+
+# Restrict the public Kubernetes API endpoint to your own address.
+# api_public_access_cidrs = ["203.0.113.10/32"]
+
+# Extra cluster admins (IAM role or user ARNs).
+# admin_principal_arns = ["arn:aws:iam::123456789012:role/my-admin-role"]
+
+# Set to true only if this account has never launched a Spot instance
+# (apply fails if the service-linked role already exists).
+# create_spot_service_linked_role = true
+
+# Ship control plane logs to CloudWatch (costs money; off by default).
+# cluster_log_types = ["api", "audit"]
