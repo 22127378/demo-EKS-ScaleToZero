@@ -53,7 +53,7 @@ quota L-F678F1CE "VPCs per region" 1 vpc
 
 echo "Spot"
 if aws iam get-role --role-name AWSServiceRoleForEC2Spot >/dev/null 2>&1; then
-  ok "EC2 Spot service-linked role exists (keep create_spot_service_linked_role=false)"
+  ok "EC2 Spot service-linked role exists (if this stack's Terraform created it, keep create_spot_service_linked_role=true or the next apply deletes it; if it predates the stack, keep false)"
 else
   info "EC2 Spot service-linked role not found: apply with -var create_spot_service_linked_role=true"
 fi

@@ -1,0 +1,57 @@
+# Both values come from Terraform (cluster name and the Karpenter node IAM role name).
+clusterName: demo
+nodeRoleName: demo-karpenter-node
+
+nodeClass:
+  volumeGiB: 20
+
+# One NodePool per entry. "default" hosts the API/FE pods and the placeholders.
+# "worker" hosts SQS workers: tainted so nothing else lands there.
+pools:
+  default:
+    cpuLimit: "16"
+    taints: []
+  worker:
+    cpuLimit: "12"
+    taints:
+      - key: workload
+        value: worker
+        effect: NoSchedule
+
+# Only these families are allowed. Instance size is capped by instanceCpu so a nodepool can
+# never launch a huge node (spot vCPU quota is limited).
+families:
+  amd64: [c5, c6i, m5, m6i, t3]
+  arm64: [c6g, c7g, m6g, m7g, t4g]
+instanceCpu: ["2", "4"]
+minMemoryMiB: 3000
+
+consolidateAfter: 1m
+expireAfter: 720h
+
+# Headroom: one placeholder per CPU architecture keeps a node alive (do-not-disrupt) and
+# holds `requests` on it. Everything else on that node's allocatable stays free, so a new
+# API/FE pod is scheduled instantly without evicting anything. If the free space runs out,
+# real pods (priority 0) evict the placeholder (priority -10), which then asks Karpenter
+# for a replacement node.
+placeholder:
+  image: registry.k8s.io/pause:3.10
+  priority: -10
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  amd64:
+    replicas: 1
+  arm64:
+    replicas: 1
+
+# Pre-pull: an init container per image runs a command that exits immediately, which
+# leaves the image in the node's cache. Add third-party images with a command that exits
+# (for example ["nginx", "-v"]). Images without any runnable exit command cannot be pre-pulled.
+prepull:
+  enabled: true
+  pauseImage: registry.k8s.io/pause:3.10
+  images: []
+  # - name: api
+  #   image: 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/demo-api:dev
+  #   command: ["/app", "-version"]

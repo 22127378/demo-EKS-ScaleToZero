@@ -21,6 +21,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
+
+	"demo/internal/db"
 )
 
 const (
@@ -34,15 +36,29 @@ type sender interface {
 	SendMessageBatch(ctx context.Context, in *sqs.SendMessageBatchInput, opts ...func(*sqs.Options)) (*sqs.SendMessageBatchOutput, error)
 }
 
+// visitor counts visits in the database (GET /db). A separate small interface keeps its tests simple.
+type visitor interface {
+	Visit(ctx context.Context) (int64, error)
+}
+
 type server struct {
 	started  time.Time
 	pod      string
 	node     string
 	queueURL string
 	sqs      sender
+	db       visitor // nil when no database is configured
+	st       store   // the recruitment data, nil when no database is configured
 }
 
 func main() {
+	// "-version" prints and exits at once. The image pre-puller runs every image with it as an
+	// init container, which pulls the image onto the node without starting the service.
+	if len(os.Args) > 1 && os.Args[1] == "-version" {
+		fmt.Println("demo-api dev")
+		return
+	}
+
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(log)
 
@@ -65,6 +81,12 @@ func main() {
 			os.Exit(1)
 		}
 		s.sqs = sqs.NewFromConfig(cfg)
+	}
+
+	// Assign only when configured: a nil *db.DB stored in an interface would not compare equal to nil.
+	if d := db.New(); d != nil {
+		s.db = d
+		s.st = pgStore{d: d}
 	}
 
 	srv := &http.Server{
@@ -102,6 +124,8 @@ func (s *server) routes() http.Handler {
 	})
 	mux.HandleFunc("GET /burn", s.burn)
 	mux.HandleFunc("POST /jobs", s.jobs)
+	mux.HandleFunc("GET /db", s.dbVisit)
+	s.registerDomain(mux)
 	return cors(logging(mux))
 }
 
@@ -131,6 +155,28 @@ func (s *server) burn(w http.ResponseWriter, r *http.Request) {
 		n++ // busy loop on purpose
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"pod": s.pod, "burnedMs": d.Milliseconds(), "iterations": n})
+}
+
+// dbVisit increments the visit counter in the database and reports how long that took.
+func (s *server) dbVisit(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "DB_HOST is not configured"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	start := time.Now()
+	n, err := s.db.Visit(ctx)
+	if err != nil {
+		slog.Error("db visit", "err", err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "database unavailable"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"visits":      n,
+		"dbLatencyMs": float64(time.Since(start).Microseconds()) / 1000,
+		"pod":         s.pod,
+	})
 }
 
 type jobsRequest struct {
@@ -189,7 +235,7 @@ func cors(next http.Handler) http.Handler {
 	origin := firstNonEmpty(os.Getenv("CORS_ORIGIN"), "*")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

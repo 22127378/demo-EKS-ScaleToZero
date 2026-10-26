@@ -15,10 +15,15 @@ metadata:
   labels: {{- include "app.labels" . | nindent 4 }}
   annotations:
     alb.ingress.kubernetes.io/group.name: {{ .Values.ingress.groupName }}
+    {{- if .Values.ingress.groupOrder }}
+    alb.ingress.kubernetes.io/group.order: {{ .Values.ingress.groupOrder | quote }}
+    {{- end }}
     alb.ingress.kubernetes.io/scheme: {{ .Values.ingress.scheme }}
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "10"
-    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: {{ .Values.ingress.healthcheck.intervalSeconds | quote }}
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: {{ .Values.ingress.healthcheck.timeoutSeconds | quote }}
+    alb.ingress.kubernetes.io/healthy-threshold-count: {{ .Values.ingress.healthcheck.healthyThreshold | quote }}
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: {{ .Values.ingress.healthcheck.unhealthyThreshold | quote }}
     alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
     {{- if $http }}
     {{- /* TODO(PLAN.md step 6): verify the ALB health check for the interceptor (admin port 9090, /livez) */}}
@@ -26,6 +31,9 @@ metadata:
     alb.ingress.kubernetes.io/healthcheck-path: /livez
     {{- else }}
     alb.ingress.kubernetes.io/healthcheck-path: {{ include "app.hcPath" . | quote }}
+    {{- end }}
+    {{- with .Values.ingress.inboundCidrs }}
+    alb.ingress.kubernetes.io/inbound-cidrs: {{ . | quote }}
     {{- end }}
     {{- if .Values.ingress.certificateArn }}
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'

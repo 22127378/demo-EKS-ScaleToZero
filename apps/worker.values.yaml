@@ -1,16 +1,28 @@
-# Worker: KEDA SQS 0..20, runs on the worker NodePool (spot, taint workload=worker)
+# Worker: KEDA SQS 0..20, runs on the worker NodePool (spot, taint workload=worker).
+# The image repository and the queue URL are set by scripts/deploy-apps.sh.
 image:
-  repository: busybox            # replace with .../demo-worker after PLAN.md step 6
-  tag: latest
+  repository: demo-worker
+  tag: 0.3.0
 arch: auto
-containerPort: 8080
-command: ["sh", "-c", "sleep 3600"]
-serviceAccountName: worker
+containerPort: 8080           # the worker serves /healthz here
+probe:
+  httpPath: /healthz
 nodePool: worker
+serviceAccountName: worker   # bound to an IAM role by Terraform (receive/delete on the queue)
+serviceAccount:
+  create: true
+env:
+  AWS_REGION: ap-southeast-1
+  PROCESS_TIME: 2s           # simulated work per message
+resources:
+  requests: { cpu: 100m, memory: 64Mi }
+  limits: { memory: 256Mi }
 ingress:
   enabled: false
 scaling:
   mode: sqs
   sqs:
-    queueURL: https://sqs.ap-southeast-1.amazonaws.com/000000000000/demo-jobs
     region: ap-southeast-1
+    queueLength: "5"
+    min: 0
+    max: 20

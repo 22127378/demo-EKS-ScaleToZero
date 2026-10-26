@@ -44,7 +44,7 @@ func TestRunProcessesAndDeletesThenStops(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		run(ctx, q, "http://queue", 10*time.Millisecond)
+		run(ctx, q, "http://queue", 10*time.Millisecond, nil)
 		close(done)
 	}()
 

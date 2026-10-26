@@ -1,0 +1,14 @@
+epoch,label
+1793001348,start
+1793001348,hpa_load_start
+1793001591,hpa_load_end
+1793001594,hpa_scaled_down
+1793001617,karpenter_probe_start
+1793001661,karpenter_probe_ready
+1793001664,karpenter_probe_deleted
+1793001855,karpenter_nodes_removed
+1793001876,sqs_send_start
+1793001877,sqs_send_end
+1793002037,sqs_drained
+1793002057,end
+1793002221,finished

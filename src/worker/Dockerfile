@@ -7,6 +7,7 @@ ARG TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
+COPY internal ./internal
 COPY api ./api
 COPY worker ./worker
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \

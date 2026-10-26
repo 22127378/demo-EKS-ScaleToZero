@@ -11,6 +11,15 @@ spec:
     name: {{ include "app.name" . }}
   minReplicas: {{ .Values.scaling.hpa.min }}
   maxReplicas: {{ .Values.scaling.hpa.max }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: {{ .Values.scaling.hpa.scaleUpPods }}
+          periodSeconds: {{ .Values.scaling.hpa.scaleUpPeriodSeconds }}
+    scaleDown:
+      stabilizationWindowSeconds: {{ .Values.scaling.hpa.scaleDownStabilizationSeconds }}
   metrics:
     - type: Resource
       resource:

@@ -1,7 +1,9 @@
 #!/bin/sh
 # Runs from /docker-entrypoint.d before nginx starts.
 #   API_BASE      address the browser uses for the API (default /api)
-#   UPSTREAM      if set, nginx proxies /api/ to it (e.g. the KEDA interceptor service)
+#   UPSTREAM      if set, nginx proxies /api/ to it (e.g. the KEDA interceptor service).
+#                 Use a fully qualified name (svc.cluster.local): nginx's resolver does not apply
+#                 the pod's DNS search domains, so a short name fails with 502.
 #   UPSTREAM_HOST Host header sent upstream; the interceptor routes on it
 set -eu
 

@@ -1,0 +1,33 @@
+{{- range $arch := list "amd64" "arm64" }}
+{{- $cfg := index $.Values.placeholder $arch }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: placeholder-{{ $arch }}
+  labels: {{- include "cc.labels" $ | nindent 4 }}
+spec:
+  replicas: {{ $cfg.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: placeholder-{{ $arch }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: placeholder-{{ $arch }}
+      annotations:
+        # Keeps Karpenter from consolidating away the node that holds the headroom.
+        karpenter.sh/do-not-disrupt: "true"
+    spec:
+      priorityClassName: placeholder
+      # Zero grace period so eviction by a real pod is immediate.
+      terminationGracePeriodSeconds: 0
+      nodeSelector:
+        nodepool: default
+        kubernetes.io/arch: {{ $arch }}
+      containers:
+        - name: pause
+          image: {{ $.Values.placeholder.image }}
+          resources:
+            requests: {{- toYaml $.Values.placeholder.requests | nindent 14 }}
+{{- end }}

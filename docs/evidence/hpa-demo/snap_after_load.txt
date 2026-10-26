@@ -1,0 +1,2 @@
+NAME       REFERENCE             TARGETS         MINPODS   MAXPODS   REPLICAS   AGE
+hpa-demo   Deployment/hpa-demo   cpu: 392%/50%   1         3         3          3m32s

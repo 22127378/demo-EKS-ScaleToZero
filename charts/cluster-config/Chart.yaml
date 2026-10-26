@@ -1,0 +1,6 @@
+apiVersion: v2
+name: cluster-config
+description: Karpenter NodeClass and NodePools, placeholder (headroom) pods and the image pre-puller
+type: application
+version: 0.1.0
+appVersion: "1.0"

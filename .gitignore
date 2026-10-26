@@ -10,3 +10,6 @@ dist/
 bin/
 # Misc
 .DS_Store
+# Terraform plan files can contain sensitive values
+tfplan
+*.tfplan

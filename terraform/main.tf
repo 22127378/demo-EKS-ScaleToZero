@@ -93,9 +93,18 @@ module "eks" {
   cloudwatch_log_group_retention_in_days = 7
 
   cluster_addons = {
-    coredns                = {}
-    kube-proxy             = {}
-    vpc-cni                = { before_compute = true }
+    coredns    = {}
+    kube-proxy = {}
+    vpc-cni = {
+      before_compute = true
+      # Keep spare pod IPs attached to each node so a new pod does not wait for an ENI/IP allocation.
+      configuration_values = jsonencode({
+        env = {
+          WARM_IP_TARGET    = "3"
+          MINIMUM_IP_TARGET = "6"
+        }
+      })
+    }
     eks-pod-identity-agent = { before_compute = true }
   }
 
@@ -136,6 +145,20 @@ module "eks" {
     "karpenter.sh/discovery" = local.name
   }
 
+  # The module's default only allows node-to-node traffic on TCP 53 and 1025-65535, so a pod
+  # listening on a port below 1025 (80, 443, ...) was unreachable from pods on other nodes.
+  # Third-party images often use those ports, so allow all traffic between nodes.
+  node_security_group_additional_rules = {
+    ingress_self_all = {
+      description = "Node to node, all ports and protocols"
+      protocol    = "-1"
+      from_port   = 0
+      to_port     = 0
+      type        = "ingress"
+      self        = true
+    }
+  }
+
   depends_on = [aws_iam_service_linked_role.spot]
 }
 
@@ -148,8 +171,33 @@ module "karpenter" {
   cluster_name          = module.eks.cluster_name
   enable_v1_permissions = true
 
-  namespace       = "karpenter"
-  service_account = "karpenter"
+  # Without this association the controller falls back to the node role and every EC2 call
+  # is denied (the module defaults to false).
+  create_pod_identity_association = true
+  namespace                       = "karpenter"
+  service_account                 = "karpenter"
+
+  # Karpenter 1.14 needs four permissions that module 20.37.2 does not grant yet
+  # (compared against the official policy of the installed Karpenter version).
+  iam_policy_statements = [
+    {
+      sid       = "AllowRegionalReadActionsForNewerKarpenter"
+      effect    = "Allow"
+      actions   = ["ec2:DescribeCapacityReservations", "ec2:DescribeInstanceStatus", "ec2:DescribePlacementGroups"]
+      resources = ["*"]
+      conditions = [{
+        test     = "StringEquals"
+        variable = "aws:RequestedRegion"
+        values   = [var.region]
+      }]
+    },
+    {
+      sid       = "AllowUnscopedInstanceProfileListAction"
+      effect    = "Allow"
+      actions   = ["iam:ListInstanceProfiles"]
+      resources = ["*"]
+    },
+  ]
 
   node_iam_role_use_name_prefix = false
   node_iam_role_name            = "${local.name}-karpenter-node"

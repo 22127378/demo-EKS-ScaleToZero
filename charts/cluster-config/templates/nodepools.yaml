@@ -1,0 +1,48 @@
+{{- range $name, $pool := .Values.pools }}
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: {{ $name }}
+  labels: {{- include "cc.labels" $ | nindent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+        # Workloads select their pool with this label (chart app: nodePool value).
+        nodepool: {{ $name }}
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+      expireAfter: {{ $.Values.expireAfter }}
+      {{- with $pool.taints }}
+      taints: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      requirements:
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64", "arm64"]
+        # Spot only, by design.
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot"]
+        - key: karpenter.k8s.aws/instance-family
+          operator: In
+          values: {{ concat $.Values.families.amd64 $.Values.families.arm64 | toJson }}
+        - key: karpenter.k8s.aws/instance-cpu
+          operator: In
+          values: {{ $.Values.instanceCpu | toJson }}
+        - key: karpenter.k8s.aws/instance-memory
+          operator: Gt
+          values: [{{ $.Values.minMemoryMiB | quote }}]
+  limits:
+    cpu: {{ $pool.cpuLimit | quote }}
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: {{ $.Values.consolidateAfter }}
+{{- end }}

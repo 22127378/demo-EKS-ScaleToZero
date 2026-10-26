@@ -15,13 +15,32 @@ args: []           # override CMD
 env: {}            # KEY: value
 envFrom: []        # - secretRef: {name: x}
 serviceAccountName: ""   # used for Pod Identity (e.g. the api sending to SQS)
+serviceAccount:
+  create: false          # true = the chart creates serviceAccountName (needed when nothing else does)
 securityContext: {}      # nothing enforced by default so unfamiliar images do not break
 
 # Probe: TCP by default (works with any image). Set httpPath to use HTTP instead.
+# The readiness probe runs every second so a new pod joins the endpoints as early as possible
+# (this was a 5 s period, which alone could add up to 5 s to a cold start).
 probe:
   httpPath: ""     # e.g. /healthz
-  initialDelaySeconds: 2
-  periodSeconds: 5
+  # Readiness gates traffic until the app answers. Disabling it makes a pod Ready as soon as its
+  # container starts, which saves the probe's own delay (kubelet adds up to ~1 s of jitter plus
+  # one period) but removes that safety net: only turn it off for apps that bind their port within
+  # milliseconds and sit behind a retrying proxy such as the KEDA interceptor.
+  readiness:
+    enabled: true
+  initialDelaySeconds: 0
+  periodSeconds: 1
+  # The startup probe holds liveness/readiness back until the app first answers, and gives
+  # slow-starting images up to failureThreshold * periodSeconds to do so.
+  # It runs BEFORE the readiness probe, so with both at 1 s a pod can wait up to ~1 s longer to
+  # become Ready. Turn it off (enabled: false) for apps that start in milliseconds; keep it for
+  # unfamiliar images that may start slowly.
+  startup:
+    enabled: true
+    periodSeconds: 1
+    failureThreshold: 30
 
 resources:
   requests: { cpu: 100m, memory: 128Mi }
@@ -46,7 +65,21 @@ ingress:
   path: /
   pathType: Prefix
   healthcheckPath: "" # defaults to probe.httpPath, or "/"
+  # ALB health check. 5 s is the shortest interval the ALB allows; a new pod receives traffic
+  # after healthyThreshold passed checks (about interval * healthyThreshold seconds).
+  healthcheck:
+    intervalSeconds: 5
+    timeoutSeconds: 2
+    healthyThreshold: 2
+    unhealthyThreshold: 2
   certificateArn: ""  # if set -> enable HTTPS 443 + redirect 80
+  # Comma-separated CIDRs allowed to reach the ALB (e.g. "203.0.113.10/32"). Empty = open to the
+  # internet. All ingresses of one ALB group should use the same value.
+  inboundCidrs: ""
+  # Order of this ingress's rules inside the shared ALB (lower is evaluated first). Give host-specific
+  # ingresses a lower number than a catch-all one: an ingress with no host matches every request, so
+  # if it comes first it hides all the others. 0 = not set (the controller falls back to its default).
+  groupOrder: 0
   annotations: {}
 
 # Pick exactly ONE scaling controller:
@@ -59,13 +92,19 @@ scaling:
   hpa:
     min: 1
     max: 2
-    cpu: 60
+    cpu: 50
+    scaleUpPods: 1              # pods added per scaleUpPeriodSeconds; no stabilization wait on the way up
+    scaleUpPeriodSeconds: 15
+    scaleDownStabilizationSeconds: 300
   http:
     min: 0
     max: 2
     scaledownPeriod: 300        # seconds without requests before scaling to zero
-    targetConcurrency: 10       # concurrent requests per pod
-    requestTimeout: 120s        # how long the interceptor holds a request while waiting for a pod
+    targetConcurrency: 100      # concurrent requests per pod (high: a Go pod handles many and max is 2 pods)
+    # How long the interceptor holds a request while waiting for a pod. Write it in Go's normalized
+    # duration form (2m0s, not 120s): the KEDA HTTP operator rewrites the field in that form and
+    # Helm then reports a field-ownership conflict on every upgrade.
+    requestTimeout: 2m0s
     interceptorNamespace: keda
     interceptorService: keda-add-ons-http-interceptor-proxy
     interceptorPort: 8080
@@ -75,7 +114,7 @@ scaling:
     queueLength: "5"
     min: 0
     max: 20
-    pollingInterval: 10
+    pollingInterval: 5          # seconds between SQS queue-length checks (also the worker's start-up latency)
     cooldownPeriod: 60
 
 pdb:

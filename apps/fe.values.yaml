@@ -1,13 +1,26 @@
-# FE: HPA 1..2. The demo image is multi-arch -> arch: auto
+# FE: HPA 1..2. The demo image is multi-arch -> arch: auto.
+# The image repository is set by scripts/deploy-apps.sh (it contains the AWS account id).
 image:
-  repository: nginx          # replace with <account>.dkr.ecr.<region>.amazonaws.com/demo-web after PLAN.md step 6
-  tag: latest
+  repository: demo-web
+  tag: 0.3.0
 arch: auto
 containerPort: 80
+probe:
+  httpPath: /
 nodePool: default
+resources:
+  requests: { cpu: 100m, memory: 64Mi }
+  limits: { memory: 256Mi }
+env:
+  # nginx proxies /api/ to the KEDA interceptor and sets the Host header it routes on.
+  # Use the fully qualified name: nginx's resolver ignores the pod's DNS search domains, so the
+  # short form "...proxy.keda" does not resolve and every request fails with 502.
+  UPSTREAM: http://keda-add-ons-http-interceptor-proxy.keda.svc.cluster.local:8080
+  UPSTREAM_HOST: api.demo.local
 scaling:
   mode: hpa
-  hpa: { min: 1, max: 2, cpu: 60 }
+  hpa: { min: 1, max: 2, cpu: 50 }
 ingress:
   host: ""                   # empty = match any host (use the ALB DNS name)
   path: /
+  groupOrder: 100            # catch-all rule: must come after host-specific ones such as the API (10)

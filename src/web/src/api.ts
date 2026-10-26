@@ -50,6 +50,29 @@ export async function ping(): Promise<Reply> {
   }
 }
 
+export interface DbReply {
+  ok: boolean;
+  latencyMs: number; // round trip seen by the browser
+  visits?: number;
+  dbLatencyMs?: number; // time the API spent on the database query
+  pod?: string;
+  error?: string;
+}
+
+// getDb calls GET /db, which increments a visit counter in the database.
+export async function getDb(): Promise<DbReply> {
+  const t0 = performance.now();
+  try {
+    const res = await call("/db");
+    const latencyMs = Math.round(performance.now() - t0);
+    const body = (await res.json().catch(() => ({}))) as { visits?: number; dbLatencyMs?: number; pod?: string; error?: string };
+    if (!res.ok) return { ok: false, latencyMs, error: body.error ?? `HTTP ${res.status}` };
+    return { ok: true, latencyMs, visits: body.visits, dbLatencyMs: body.dbLatencyMs, pod: body.pod };
+  } catch (e) {
+    return { ok: false, latencyMs: Math.round(performance.now() - t0), error: String(e) };
+  }
+}
+
 export async function burn(ms: number): Promise<string> {
   const res = await call(`/burn?ms=${ms}`);
   return res.ok ? `burned ${ms} ms` : `HTTP ${res.status}`;

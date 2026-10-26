@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { burn, ping, sendJobs, type Reply } from "./api";
+import { burn, getDb, ping, sendJobs, type DbReply, type Reply } from "./api";
 
 const HISTORY = 30;
 
@@ -9,6 +9,7 @@ export default function App() {
   const [burnMs, setBurnMs] = useState(3000);
   const [jobCount, setJobCount] = useState(20);
   const [message, setMessage] = useState("");
+  const [db, setDb] = useState<DbReply | null>(null);
   const inFlight = useRef(false);
 
   const doPing = useCallback(async () => {
@@ -63,6 +64,27 @@ export default function App() {
             <dd>{latest.info?.arch ?? "-"}</dd>
             <dt>Distinct pods (last {HISTORY})</dt>
             <dd>{pods.size}</dd>
+          </dl>
+        )}
+      </section>
+
+      <section className="card">
+        <h2>Database</h2>
+        <div className="row">
+          <button onClick={async () => setDb(await getDb())}>Count a visit</button>
+        </div>
+        {db && (
+          <dl className="grid">
+            <dt>Status</dt>
+            <dd className={db.ok ? "ok" : "bad"}>{db.ok ? "OK" : db.error}</dd>
+            <dt>Visits (shared by all pods)</dt>
+            <dd>{db.visits ?? "-"}</dd>
+            <dt>Query time</dt>
+            <dd>{db.dbLatencyMs !== undefined ? `${db.dbLatencyMs.toFixed(1)} ms` : "-"}</dd>
+            <dt>Round trip</dt>
+            <dd>{db.latencyMs} ms</dd>
+            <dt>Answered by</dt>
+            <dd>{db.pod ?? "-"}</dd>
           </dl>
         )}
       </section>

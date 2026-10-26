@@ -5,7 +5,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,6 +20,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
+
+	"demo/internal/db"
 )
 
 // queue is the part of the SQS client the worker needs; tests replace it.
@@ -26,7 +30,26 @@ type queue interface {
 	DeleteMessage(ctx context.Context, in *sqs.DeleteMessageInput, opts ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error)
 }
 
+// screener completes a queued screening in the database. It reports whether a queued screening
+// was found for the application.
+type screener interface {
+	Screen(ctx context.Context, applicationID int64) (bool, error)
+}
+
+// screenJob is the message the API queues for POST /applications/{id}/screen.
+type screenJob struct {
+	Type          string `json:"type"`
+	ApplicationID int64  `json:"applicationId"`
+}
+
 func main() {
+	// "-version" prints and exits at once. The image pre-puller runs every image with it as an
+	// init container, which pulls the image onto the node without starting the service.
+	if len(os.Args) > 1 && os.Args[1] == "-version" {
+		fmt.Println("demo-worker dev")
+		return
+	}
+
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(log)
 
@@ -58,13 +81,19 @@ func main() {
 		_ = health.Shutdown(shutdownCtx)
 	}()
 
-	log.Info("worker started", "queue", queueURL, "processTime", processTime.String())
-	run(ctx, sqs.NewFromConfig(cfg), queueURL, processTime)
+	// Screening messages need the database; without it only the demo messages can be processed.
+	var sc screener
+	if d := db.New(); d != nil {
+		sc = d
+	}
+
+	log.Info("worker started", "queue", queueURL, "processTime", processTime.String(), "screening", sc != nil)
+	run(ctx, sqs.NewFromConfig(cfg), queueURL, processTime, sc)
 	log.Info("worker stopped")
 }
 
 // run polls until ctx is cancelled, then waits for in-flight messages.
-func run(ctx context.Context, q queue, queueURL string, processTime time.Duration) {
+func run(ctx context.Context, q queue, queueURL string, processTime time.Duration, sc screener) {
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
@@ -89,20 +118,39 @@ func run(ctx context.Context, q queue, queueURL string, processTime time.Duratio
 			wg.Add(1)
 			go func(m types.Message) {
 				defer wg.Done()
-				handle(q, queueURL, m, processTime)
+				handle(q, queueURL, m, processTime, sc)
 			}(m)
 		}
 	}
 }
 
-// handle processes one message and deletes it. The delete uses a fresh context
-// so a message that finished during shutdown is still acknowledged.
-func handle(q queue, queueURL string, m types.Message, processTime time.Duration) {
+// handle processes one message and deletes it. Contexts are fresh (not tied to shutdown) so a
+// message that finished while the worker was stopping is still acknowledged. If the real work
+// fails the message is NOT deleted: SQS hands it out again, and after maxReceiveCount tries it
+// moves to the dead-letter queue.
+func handle(q queue, queueURL string, m types.Message, processTime time.Duration, sc screener) {
 	start := time.Now()
 	time.Sleep(processTime) // stand-in for real work
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	var job screenJob
+	if json.Unmarshal([]byte(aws.ToString(m.Body)), &job) == nil && job.Type == "screen" {
+		if sc == nil {
+			slog.Error("screening message but no database configured", "messageId", aws.ToString(m.MessageId))
+			return
+		}
+		found, err := sc.Screen(ctx, job.ApplicationID)
+		if err != nil {
+			slog.Error("screening failed", "err", err, "applicationId", job.ApplicationID)
+			return
+		}
+		if !found {
+			slog.Warn("no queued screening for this application (stale or repeated message)", "applicationId", job.ApplicationID)
+		}
+	}
+
 	if _, err := q.DeleteMessage(ctx, &sqs.DeleteMessageInput{QueueUrl: aws.String(queueURL), ReceiptHandle: m.ReceiptHandle}); err != nil {
 		slog.Error("delete", "err", err, "messageId", aws.ToString(m.MessageId))
 		return

@@ -40,3 +40,27 @@ output "private_subnet_ids" {
 output "public_subnet_ids" {
   value = module.vpc.public_subnets
 }
+
+output "queue_url" {
+  description = "URL of the jobs queue."
+  value       = aws_sqs_queue.jobs.url
+}
+
+output "dlq_url" {
+  description = "URL of the dead-letter queue."
+  value       = aws_sqs_queue.jobs_dlq.url
+}
+
+output "db_endpoint" {
+  description = "Writer endpoint of the Aurora cluster."
+  value       = aws_rds_cluster.aurora.endpoint
+}
+
+output "db_name" {
+  value = var.db_name
+}
+
+output "db_secret_arn" {
+  description = "Secrets Manager secret holding the database username and password."
+  value       = aws_rds_cluster.aurora.master_user_secret[0].secret_arn
+}

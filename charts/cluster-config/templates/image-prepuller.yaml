@@ -1,0 +1,42 @@
+{{- if and .Values.prepull.enabled .Values.prepull.images }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: image-prepuller
+  labels: {{- include "cc.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: image-prepuller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: image-prepuller
+    spec:
+      terminationGracePeriodSeconds: 0
+      # Only Karpenter-managed nodes carry the nodepool label; system nodes are skipped.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: nodepool
+                    operator: Exists
+      # Also run on tainted nodes (the worker pool).
+      tolerations:
+        - operator: Exists
+      initContainers:
+        {{- range .Values.prepull.images }}
+        - name: pull-{{ .name }}
+          image: {{ .image | quote }}
+          imagePullPolicy: IfNotPresent
+          command: {{ .command | toJson }}
+          resources:
+            requests: { cpu: 1m, memory: 4Mi }
+        {{- end }}
+      containers:
+        - name: pause
+          image: {{ .Values.prepull.pauseImage }}
+          resources:
+            requests: { cpu: 1m, memory: 4Mi }
+{{- end }}

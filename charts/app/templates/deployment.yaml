@@ -8,6 +8,12 @@ spec:
   {{- if eq $mode "none" }}
   replicas: {{ .Values.replicas }}
   {{- end }}
+  {{- /* Never remove a ready pod before its replacement is ready: with 1-2 pods this avoids downtime on rollouts */}}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels: {{- include "app.selector" . | nindent 6 }}
   template:
@@ -76,13 +82,20 @@ spec:
           {{- if .Values.probe.httpPath }}
           {{- $probe = dict "httpGet" (dict "path" .Values.probe.httpPath "port" "http") }}
           {{- end }}
+          {{- if .Values.probe.startup.enabled }}
+          startupProbe:
+            {{- toYaml $probe | nindent 12 }}
+            periodSeconds: {{ .Values.probe.startup.periodSeconds }}
+            failureThreshold: {{ .Values.probe.startup.failureThreshold }}
+          {{- end }}
+          {{- if .Values.probe.readiness.enabled }}
           readinessProbe:
             {{- toYaml $probe | nindent 12 }}
             initialDelaySeconds: {{ .Values.probe.initialDelaySeconds }}
             periodSeconds: {{ .Values.probe.periodSeconds }}
+          {{- end }}
           livenessProbe:
             {{- toYaml $probe | nindent 12 }}
-            initialDelaySeconds: 15
             periodSeconds: 10
             failureThreshold: 6
           resources: {{- toYaml .Values.resources | nindent 12 }}

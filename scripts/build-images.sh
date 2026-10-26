@@ -12,6 +12,7 @@
 #   TAG        image tag (default: dev)
 #   PLATFORMS  target platforms (default: linux/amd64,linux/arm64)
 #   ONLY       space-separated subset of "api worker web" (default: all three)
+#   BUILDER    buildx builder to use (default: the currently selected one)
 #
 # Multi-platform output needs the containerd image store or a docker-container
 # buildx builder; the Go and Node stages cross-compile natively, so no QEMU is needed.
@@ -46,6 +47,7 @@ for name in $only; do
   [[ -n "$registry" ]] && image="$registry/$image"
 
   args=(buildx build --platform "$platforms" -f "$dockerfile" -t "$image")
+  if [[ -n "${BUILDER:-}" ]]; then args+=(--builder "$BUILDER"); fi
   if (( push )); then args+=(--push); else args+=(--load); fi
 
   echo "==> $image ($platforms)"
