@@ -1,0 +1,1060 @@
+{
+    "apiVersion": "v1",
+    "items": [
+        {
+            "apiVersion": "v1",
+            "count": 2,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:22:38Z",
+            "involvedObject": {
+                "apiVersion": "policy/v1",
+                "kind": "PodDisruptionBudget",
+                "name": "hpa-demo",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30564",
+                "uid": "abf1083e-a79d-430f-882e-8fd9e3d070a4"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:22:38Z",
+            "message": "No matching pods found",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:22:38Z",
+                "name": "hpa-demo.18e2e555e7ec303e",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30567",
+                "uid": "ee96f44a-e05c-4d6a-b24f-80854960750b"
+            },
+            "reason": "NoPods",
+            "reportingComponent": "controllermanager",
+            "reportingInstance": "",
+            "source": {
+                "component": "controllermanager"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:22:39Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "kind": "Pod",
+                "name": "hpa-demo-66f485d9cc-dg4m5",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30582",
+                "uid": "5340277c-945d-4c64-8330-4c990f2c174c"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:22:39Z",
+            "message": "Successfully assigned hpa-demo/hpa-demo-66f485d9cc-dg4m5 to ip-10-0-37-241.ap-southeast-1.compute.internal",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:22:39Z",
+                "name": "hpa-demo-66f485d9cc-dg4m5.18e2e555f992a628",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30587",
+                "uid": "56fc5a82-4e97-43a1-85ff-5d684f193037"
+            },
+            "reason": "Scheduled",
+            "reportingComponent": "default-scheduler",
+            "reportingInstance": "",
+            "source": {
+                "component": "default-scheduler"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:22:39Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{app}",
+                "kind": "Pod",
+                "name": "hpa-demo-66f485d9cc-dg4m5",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30585",
+                "uid": "5340277c-945d-4c64-8330-4c990f2c174c"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:22:39Z",
+            "message": "Container image \"728384804953.dkr.ecr.ap-southeast-1.amazonaws.com/demo-api:0.3.4\" already present on machine",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:22:39Z",
+                "name": "hpa-demo-66f485d9cc-dg4m5.18e2e5561c9cc475",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30595",
+                "uid": "8baae083-d7a3-4ef5-8d94-b69a596d08d0"
+            },
+            "reason": "Pulled",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "ip-10-0-37-241.ap-southeast-1.compute.internal",
+            "source": {
+                "component": "kubelet",
+                "host": "ip-10-0-37-241.ap-southeast-1.compute.internal"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:22:39Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{app}",
+                "kind": "Pod",
+                "name": "hpa-demo-66f485d9cc-dg4m5",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30585",
+                "uid": "5340277c-945d-4c64-8330-4c990f2c174c"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:22:39Z",
+            "message": "Created container: app",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:22:39Z",
+                "name": "hpa-demo-66f485d9cc-dg4m5.18e2e5561e275984",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30597",
+                "uid": "e171533d-7c50-48c0-ac26-852c9ae98502"
+            },
+            "reason": "Created",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "ip-10-0-37-241.ap-southeast-1.compute.internal",
+            "source": {
+                "component": "kubelet",
+                "host": "ip-10-0-37-241.ap-southeast-1.compute.internal"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:22:39Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{app}",
+                "kind": "Pod",
+                "name": "hpa-demo-66f485d9cc-dg4m5",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30585",
+                "uid": "5340277c-945d-4c64-8330-4c990f2c174c"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:22:39Z",
+            "message": "Started container app",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:22:39Z",
+                "name": "hpa-demo-66f485d9cc-dg4m5.18e2e55620de886c",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30598",
+                "uid": "9ab848ae-294c-447b-834d-b5536a067fe4"
+            },
+            "reason": "Started",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "ip-10-0-37-241.ap-southeast-1.compute.internal",
+            "source": {
+                "component": "kubelet",
+                "host": "ip-10-0-37-241.ap-southeast-1.compute.internal"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:22:39Z",
+            "involvedObject": {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "name": "hpa-demo",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30577",
+                "uid": "c491224b-4576-4196-8058-6152c5b77bc1"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:22:39Z",
+            "message": "Scaled up replica set hpa-demo-66f485d9cc from 0 to 1",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:22:39Z",
+                "name": "hpa-demo.18e2e555f5dcf8c8",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30580",
+                "uid": "66a9475c-a577-46f3-84cf-1a5934eae4c0"
+            },
+            "reason": "ScalingReplicaSet",
+            "reportingComponent": "deployment-controller",
+            "reportingInstance": "",
+            "source": {
+                "component": "deployment-controller"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:22:39Z",
+            "involvedObject": {
+                "apiVersion": "apps/v1",
+                "kind": "ReplicaSet",
+                "name": "hpa-demo-66f485d9cc",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30578",
+                "uid": "b36c709c-e8a4-4f9d-a949-9f84ab90b28e"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:22:39Z",
+            "message": "Created pod: hpa-demo-66f485d9cc-dg4m5",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:22:39Z",
+                "name": "hpa-demo-66f485d9cc.18e2e555f8a3b5c0",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30584",
+                "uid": "e3c46404-1d5a-4a32-a0c7-9a3f82653fb5"
+            },
+            "reason": "SuccessfulCreate",
+            "reportingComponent": "replicaset-controller",
+            "reportingInstance": "",
+            "source": {
+                "component": "replicaset-controller"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:22:54Z",
+            "involvedObject": {
+                "apiVersion": "autoscaling/v2",
+                "kind": "HorizontalPodAutoscaler",
+                "name": "hpa-demo",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30592",
+                "uid": "f312bf22-67cd-427f-a260-2dc5f7a3cb2a"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:22:54Z",
+            "message": "failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:22:54Z",
+                "name": "hpa-demo.18e2e5597b4e6168",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30682",
+                "uid": "27e98d74-43eb-4c16-88ca-8f6329756ebf"
+            },
+            "reason": "FailedGetResourceMetric",
+            "reportingComponent": "horizontal-pod-autoscaler",
+            "reportingInstance": "",
+            "source": {
+                "component": "horizontal-pod-autoscaler"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:22:54Z",
+            "involvedObject": {
+                "apiVersion": "autoscaling/v2",
+                "kind": "HorizontalPodAutoscaler",
+                "name": "hpa-demo",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30592",
+                "uid": "f312bf22-67cd-427f-a260-2dc5f7a3cb2a"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:22:54Z",
+            "message": "invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:22:54Z",
+                "name": "hpa-demo.18e2e5597bdb950f",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30684",
+                "uid": "583e1891-0a7f-411e-bbef-cdfa252156a1"
+            },
+            "reason": "FailedComputeMetricsReplicas",
+            "reportingComponent": "horizontal-pod-autoscaler",
+            "reportingInstance": "",
+            "source": {
+                "component": "horizontal-pod-autoscaler"
+            },
+            "type": "Warning"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:23:25Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{load}",
+                "kind": "Pod",
+                "name": "load",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30845",
+                "uid": "10b0f1b9-7a7c-4884-ae0e-cb00d1b05399"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:23:25Z",
+            "message": "Started container load",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:23:25Z",
+                "name": "load.18e2e560d3f8665a",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30855",
+                "uid": "2c491538-375d-4f09-9fa5-54502c117eb2"
+            },
+            "reason": "Started",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "ip-10-0-37-241.ap-southeast-1.compute.internal",
+            "source": {
+                "component": "kubelet",
+                "host": "ip-10-0-37-241.ap-southeast-1.compute.internal"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:23:25Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{load}",
+                "kind": "Pod",
+                "name": "load",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30845",
+                "uid": "10b0f1b9-7a7c-4884-ae0e-cb00d1b05399"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:23:25Z",
+            "message": "Created container: load",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:23:25Z",
+                "name": "load.18e2e560d147ce2a",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30854",
+                "uid": "7d6258eb-85e0-4e14-9cd5-544cf34ffe55"
+            },
+            "reason": "Created",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "ip-10-0-37-241.ap-southeast-1.compute.internal",
+            "source": {
+                "component": "kubelet",
+                "host": "ip-10-0-37-241.ap-southeast-1.compute.internal"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:23:25Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{load}",
+                "kind": "Pod",
+                "name": "load",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30845",
+                "uid": "10b0f1b9-7a7c-4884-ae0e-cb00d1b05399"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:23:25Z",
+            "message": "Container image \"curlimages/curl:8.10.1\" already present on machine",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:23:25Z",
+                "name": "load.18e2e560cff0f13b",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30852",
+                "uid": "bac5df19-7b4a-4a2b-a8bb-03f9ecf1c2c7"
+            },
+            "reason": "Pulled",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "ip-10-0-37-241.ap-southeast-1.compute.internal",
+            "source": {
+                "component": "kubelet",
+                "host": "ip-10-0-37-241.ap-southeast-1.compute.internal"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:23:25Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "kind": "Pod",
+                "name": "load",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30843",
+                "uid": "10b0f1b9-7a7c-4884-ae0e-cb00d1b05399"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:23:25Z",
+            "message": "Successfully assigned hpa-demo/load to ip-10-0-37-241.ap-southeast-1.compute.internal",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:23:25Z",
+                "name": "load.18e2e560af01d599",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30846",
+                "uid": "a1a5cf0a-ecf0-4e95-9c4a-f0e9c806c08a"
+            },
+            "reason": "Scheduled",
+            "reportingComponent": "default-scheduler",
+            "reportingInstance": "",
+            "source": {
+                "component": "default-scheduler"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:23:54Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{app}",
+                "kind": "Pod",
+                "name": "hpa-demo-66f485d9cc-f8pcv",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31008",
+                "uid": "7a832b3a-faef-4b42-b60d-9e731bb0a26d"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:23:54Z",
+            "message": "Container image \"728384804953.dkr.ecr.ap-southeast-1.amazonaws.com/demo-api:0.3.4\" already present on machine",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:23:54Z",
+                "name": "hpa-demo-66f485d9cc-f8pcv.18e2e567a0b75fa9",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31021",
+                "uid": "df759e37-e89e-406a-a2f8-f1c4d2065548"
+            },
+            "reason": "Pulled",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "ip-10-0-10-231.ap-southeast-1.compute.internal",
+            "source": {
+                "component": "kubelet",
+                "host": "ip-10-0-10-231.ap-southeast-1.compute.internal"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:23:54Z",
+            "involvedObject": {
+                "apiVersion": "autoscaling/v2",
+                "kind": "HorizontalPodAutoscaler",
+                "name": "hpa-demo",
+                "namespace": "hpa-demo",
+                "resourceVersion": "30923",
+                "uid": "f312bf22-67cd-427f-a260-2dc5f7a3cb2a"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:23:54Z",
+            "message": "New size: 2; reason: cpu resource utilization (percentage of request) above target",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:23:54Z",
+                "name": "hpa-demo.18e2e56779e73631",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31001",
+                "uid": "1cb35ba9-7e6d-49c0-9a92-38a6e1a97baf"
+            },
+            "reason": "SuccessfulRescale",
+            "reportingComponent": "horizontal-pod-autoscaler",
+            "reportingInstance": "",
+            "source": {
+                "component": "horizontal-pod-autoscaler"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:23:54Z",
+            "involvedObject": {
+                "apiVersion": "apps/v1",
+                "kind": "ReplicaSet",
+                "name": "hpa-demo-66f485d9cc",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31003",
+                "uid": "b36c709c-e8a4-4f9d-a949-9f84ab90b28e"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:23:54Z",
+            "message": "Created pod: hpa-demo-66f485d9cc-f8pcv",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:23:54Z",
+                "name": "hpa-demo-66f485d9cc.18e2e5677e33d8e9",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31011",
+                "uid": "881fe8e2-29d5-4b12-8f22-c344112740f8"
+            },
+            "reason": "SuccessfulCreate",
+            "reportingComponent": "replicaset-controller",
+            "reportingInstance": "",
+            "source": {
+                "component": "replicaset-controller"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:23:54Z",
+            "involvedObject": {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "name": "hpa-demo",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31000",
+                "uid": "c491224b-4576-4196-8058-6152c5b77bc1"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:23:54Z",
+            "message": "Scaled up replica set hpa-demo-66f485d9cc from 1 to 2",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:23:54Z",
+                "name": "hpa-demo.18e2e5677b79578c",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31005",
+                "uid": "44d429bb-1f2d-4bbc-b5c4-d1f411d7a56b"
+            },
+            "reason": "ScalingReplicaSet",
+            "reportingComponent": "deployment-controller",
+            "reportingInstance": "",
+            "source": {
+                "component": "deployment-controller"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:23:54Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{app}",
+                "kind": "Pod",
+                "name": "hpa-demo-66f485d9cc-f8pcv",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31008",
+                "uid": "7a832b3a-faef-4b42-b60d-9e731bb0a26d"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:23:54Z",
+            "message": "Started container app",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:23:54Z",
+                "name": "hpa-demo-66f485d9cc-f8pcv.18e2e567a3d36215",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31025",
+                "uid": "d45aa43a-7bbb-4377-9f17-78c76f12c68a"
+            },
+            "reason": "Started",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "ip-10-0-10-231.ap-southeast-1.compute.internal",
+            "source": {
+                "component": "kubelet",
+                "host": "ip-10-0-10-231.ap-southeast-1.compute.internal"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:23:54Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{app}",
+                "kind": "Pod",
+                "name": "hpa-demo-66f485d9cc-f8pcv",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31008",
+                "uid": "7a832b3a-faef-4b42-b60d-9e731bb0a26d"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:23:54Z",
+            "message": "Created container: app",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:23:54Z",
+                "name": "hpa-demo-66f485d9cc-f8pcv.18e2e567a1ebc288",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31023",
+                "uid": "a37a6d8f-d1ce-47e7-bb5f-079690081da7"
+            },
+            "reason": "Created",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "ip-10-0-10-231.ap-southeast-1.compute.internal",
+            "source": {
+                "component": "kubelet",
+                "host": "ip-10-0-10-231.ap-southeast-1.compute.internal"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:23:54Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "kind": "Pod",
+                "name": "hpa-demo-66f485d9cc-f8pcv",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31007",
+                "uid": "7a832b3a-faef-4b42-b60d-9e731bb0a26d"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:23:54Z",
+            "message": "Successfully assigned hpa-demo/hpa-demo-66f485d9cc-f8pcv to ip-10-0-10-231.ap-southeast-1.compute.internal",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:23:54Z",
+                "name": "hpa-demo-66f485d9cc-f8pcv.18e2e5677ef8d7ee",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31012",
+                "uid": "1cd8864c-6cd8-46a6-a9a0-af5f80cc7e57"
+            },
+            "reason": "Scheduled",
+            "reportingComponent": "default-scheduler",
+            "reportingInstance": "",
+            "source": {
+                "component": "default-scheduler"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:24:09Z",
+            "involvedObject": {
+                "apiVersion": "apps/v1",
+                "kind": "ReplicaSet",
+                "name": "hpa-demo-66f485d9cc",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31109",
+                "uid": "b36c709c-e8a4-4f9d-a949-9f84ab90b28e"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:24:09Z",
+            "message": "Created pod: hpa-demo-66f485d9cc-hcmz5",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:24:09Z",
+                "name": "hpa-demo-66f485d9cc.18e2e56b00aa8941",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31118",
+                "uid": "2f7fb865-0004-40c9-b9b3-b03e7ee8bdf1"
+            },
+            "reason": "SuccessfulCreate",
+            "reportingComponent": "replicaset-controller",
+            "reportingInstance": "",
+            "source": {
+                "component": "replicaset-controller"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:24:09Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{app}",
+                "kind": "Pod",
+                "name": "hpa-demo-66f485d9cc-hcmz5",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31117",
+                "uid": "884a94db-cc11-4a3e-8274-f478723a6c79"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:24:09Z",
+            "message": "Started container app",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:24:09Z",
+                "name": "hpa-demo-66f485d9cc-hcmz5.18e2e56b24f3a484",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31130",
+                "uid": "890db215-179c-41c3-9436-b113526c4c98"
+            },
+            "reason": "Started",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "ip-10-0-10-231.ap-southeast-1.compute.internal",
+            "source": {
+                "component": "kubelet",
+                "host": "ip-10-0-10-231.ap-southeast-1.compute.internal"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:24:09Z",
+            "involvedObject": {
+                "apiVersion": "autoscaling/v2",
+                "kind": "HorizontalPodAutoscaler",
+                "name": "hpa-demo",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31002",
+                "uid": "f312bf22-67cd-427f-a260-2dc5f7a3cb2a"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:24:09Z",
+            "message": "New size: 3; reason: cpu resource utilization (percentage of request) above target",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:24:09Z",
+                "name": "hpa-demo.18e2e56afc346681",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31111",
+                "uid": "3bc4918e-6b17-4931-934a-b37e29a0775e"
+            },
+            "reason": "SuccessfulRescale",
+            "reportingComponent": "horizontal-pod-autoscaler",
+            "reportingInstance": "",
+            "source": {
+                "component": "horizontal-pod-autoscaler"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:24:09Z",
+            "involvedObject": {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "name": "hpa-demo",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31108",
+                "uid": "c491224b-4576-4196-8058-6152c5b77bc1"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:24:09Z",
+            "message": "Scaled up replica set hpa-demo-66f485d9cc from 2 to 3",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:24:09Z",
+                "name": "hpa-demo.18e2e56afce61885",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31112",
+                "uid": "390dccc2-d12f-46ab-bd9e-0bd9527ffcda"
+            },
+            "reason": "ScalingReplicaSet",
+            "reportingComponent": "deployment-controller",
+            "reportingInstance": "",
+            "source": {
+                "component": "deployment-controller"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:24:09Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{app}",
+                "kind": "Pod",
+                "name": "hpa-demo-66f485d9cc-hcmz5",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31117",
+                "uid": "884a94db-cc11-4a3e-8274-f478723a6c79"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:24:09Z",
+            "message": "Created container: app",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:24:09Z",
+                "name": "hpa-demo-66f485d9cc-hcmz5.18e2e56b22fdfb69",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31129",
+                "uid": "ef85636e-fa96-46bb-a32e-61fd48c95933"
+            },
+            "reason": "Created",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "ip-10-0-10-231.ap-southeast-1.compute.internal",
+            "source": {
+                "component": "kubelet",
+                "host": "ip-10-0-10-231.ap-southeast-1.compute.internal"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:24:09Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{app}",
+                "kind": "Pod",
+                "name": "hpa-demo-66f485d9cc-hcmz5",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31117",
+                "uid": "884a94db-cc11-4a3e-8274-f478723a6c79"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:24:09Z",
+            "message": "Container image \"728384804953.dkr.ecr.ap-southeast-1.amazonaws.com/demo-api:0.3.4\" already present on machine",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:24:09Z",
+                "name": "hpa-demo-66f485d9cc-hcmz5.18e2e56b21ce9385",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31127",
+                "uid": "a42a3ae9-3cd0-490f-be4b-5e7c332c255d"
+            },
+            "reason": "Pulled",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "ip-10-0-10-231.ap-southeast-1.compute.internal",
+            "source": {
+                "component": "kubelet",
+                "host": "ip-10-0-10-231.ap-southeast-1.compute.internal"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:24:09Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "kind": "Pod",
+                "name": "hpa-demo-66f485d9cc-hcmz5",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31115",
+                "uid": "884a94db-cc11-4a3e-8274-f478723a6c79"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:24:09Z",
+            "message": "Successfully assigned hpa-demo/hpa-demo-66f485d9cc-hcmz5 to ip-10-0-10-231.ap-southeast-1.compute.internal",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:24:09Z",
+                "name": "hpa-demo-66f485d9cc-hcmz5.18e2e56b01749242",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31121",
+                "uid": "faba4bcc-80b1-43de-a7b3-cbd3c93b6663"
+            },
+            "reason": "Scheduled",
+            "reportingComponent": "default-scheduler",
+            "reportingInstance": "",
+            "source": {
+                "component": "default-scheduler"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:27:09Z",
+            "involvedObject": {
+                "apiVersion": "apps/v1",
+                "kind": "ReplicaSet",
+                "name": "hpa-demo-66f485d9cc",
+                "namespace": "hpa-demo",
+                "resourceVersion": "32084",
+                "uid": "b36c709c-e8a4-4f9d-a949-9f84ab90b28e"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:27:09Z",
+            "message": "Deleted pod: hpa-demo-66f485d9cc-hcmz5",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:27:09Z",
+                "name": "hpa-demo-66f485d9cc.18e2e594fa721b9f",
+                "namespace": "hpa-demo",
+                "resourceVersion": "32100",
+                "uid": "2a05fab2-2390-4142-98e0-96457f617c15"
+            },
+            "reason": "SuccessfulDelete",
+            "reportingComponent": "replicaset-controller",
+            "reportingInstance": "",
+            "source": {
+                "component": "replicaset-controller"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:27:09Z",
+            "involvedObject": {
+                "apiVersion": "apps/v1",
+                "kind": "ReplicaSet",
+                "name": "hpa-demo-66f485d9cc",
+                "namespace": "hpa-demo",
+                "resourceVersion": "32084",
+                "uid": "b36c709c-e8a4-4f9d-a949-9f84ab90b28e"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:27:09Z",
+            "message": "Deleted pod: hpa-demo-66f485d9cc-f8pcv",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:27:09Z",
+                "name": "hpa-demo-66f485d9cc.18e2e594f9cd15d4",
+                "namespace": "hpa-demo",
+                "resourceVersion": "32091",
+                "uid": "9dbf7e44-91c0-480b-ac26-bd2492195f98"
+            },
+            "reason": "SuccessfulDelete",
+            "reportingComponent": "replicaset-controller",
+            "reportingInstance": "",
+            "source": {
+                "component": "replicaset-controller"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:27:09Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{app}",
+                "kind": "Pod",
+                "name": "hpa-demo-66f485d9cc-hcmz5",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31117",
+                "uid": "884a94db-cc11-4a3e-8274-f478723a6c79"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:27:09Z",
+            "message": "Stopping container app",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:27:09Z",
+                "name": "hpa-demo-66f485d9cc-hcmz5.18e2e594fa0a187c",
+                "namespace": "hpa-demo",
+                "resourceVersion": "32093",
+                "uid": "18b4bdf0-62ab-4d68-b719-4803aac5254b"
+            },
+            "reason": "Killing",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "ip-10-0-10-231.ap-southeast-1.compute.internal",
+            "source": {
+                "component": "kubelet",
+                "host": "ip-10-0-10-231.ap-southeast-1.compute.internal"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:27:09Z",
+            "involvedObject": {
+                "apiVersion": "autoscaling/v2",
+                "kind": "HorizontalPodAutoscaler",
+                "name": "hpa-demo",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31825",
+                "uid": "f312bf22-67cd-427f-a260-2dc5f7a3cb2a"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:27:09Z",
+            "message": "New size: 1; reason: All metrics below target",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:27:09Z",
+                "name": "hpa-demo.18e2e594f81f0490",
+                "namespace": "hpa-demo",
+                "resourceVersion": "32082",
+                "uid": "f1cc9956-15d4-443c-a66b-f7f01fd2cd6c"
+            },
+            "reason": "SuccessfulRescale",
+            "reportingComponent": "horizontal-pod-autoscaler",
+            "reportingInstance": "",
+            "source": {
+                "component": "horizontal-pod-autoscaler"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:27:09Z",
+            "involvedObject": {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "name": "hpa-demo",
+                "namespace": "hpa-demo",
+                "resourceVersion": "32081",
+                "uid": "c491224b-4576-4196-8058-6152c5b77bc1"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:27:09Z",
+            "message": "Scaled down replica set hpa-demo-66f485d9cc from 3 to 1",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:27:09Z",
+                "name": "hpa-demo.18e2e594f8d27474",
+                "namespace": "hpa-demo",
+                "resourceVersion": "32085",
+                "uid": "afd5f890-ea37-448b-9f20-7dbd3f0ba037"
+            },
+            "reason": "ScalingReplicaSet",
+            "reportingComponent": "deployment-controller",
+            "reportingInstance": "",
+            "source": {
+                "component": "deployment-controller"
+            },
+            "type": "Normal"
+        },
+        {
+            "apiVersion": "v1",
+            "count": 1,
+            "eventTime": null,
+            "firstTimestamp": "2026-10-29T04:27:09Z",
+            "involvedObject": {
+                "apiVersion": "v1",
+                "fieldPath": "spec.containers{app}",
+                "kind": "Pod",
+                "name": "hpa-demo-66f485d9cc-f8pcv",
+                "namespace": "hpa-demo",
+                "resourceVersion": "31008",
+                "uid": "7a832b3a-faef-4b42-b60d-9e731bb0a26d"
+            },
+            "kind": "Event",
+            "lastTimestamp": "2026-10-29T04:27:09Z",
+            "message": "Stopping container app",
+            "metadata": {
+                "creationTimestamp": "2026-10-29T04:27:09Z",
+                "name": "hpa-demo-66f485d9cc-f8pcv.18e2e594f97e5f5e",
+                "namespace": "hpa-demo",
+                "resourceVersion": "32089",
+                "uid": "2b98de36-80a9-4299-827f-fe358e120b6c"
+            },
+            "reason": "Killing",
+            "reportingComponent": "kubelet",
+            "reportingInstance": "ip-10-0-10-231.ap-southeast-1.compute.internal",
+            "source": {
+                "component": "kubelet",
+                "host": "ip-10-0-10-231.ap-southeast-1.compute.internal"
+            },
+            "type": "Normal"
+        }
+    ],
+    "kind": "List",
+    "metadata": {
+        "resourceVersion": ""
+    }
+}

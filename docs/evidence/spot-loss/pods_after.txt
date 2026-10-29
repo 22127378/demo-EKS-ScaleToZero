@@ -1,0 +1,5 @@
+demo          api-55858bb865-8mjm5                                   1/1   Running                 0               3s      10.0.20.8     ip-10-0-23-174.ap-southeast-1.compute.internal   <none>   <none>
+demo          fe-684bb478c8-dpcwc                                    1/1   Running                 0               2m59s   10.0.8.73     ip-10-0-2-6.ap-southeast-1.compute.internal      <none>   <none>
+hpa-demo      hpa-demo-6664b749df-c28vj                              1/1   Running                 0               2m59s   10.0.12.119   ip-10-0-2-6.ap-southeast-1.compute.internal      <none>   <none>
+kube-system   placeholder-amd64-75c5b8fbb8-j8bvj                     1/1   Running                 0               70s     10.0.30.33    ip-10-0-23-174.ap-southeast-1.compute.internal   <none>   <none>
+kube-system   placeholder-arm64-5f6bc78f8d-rcpv2                     1/1   Running                 0               5m10s   10.0.10.85    ip-10-0-2-6.ap-southeast-1.compute.internal      <none>   <none>

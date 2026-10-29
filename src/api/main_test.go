@@ -111,3 +111,15 @@ func TestCORSPreflight(t *testing.T) {
 		t.Fatalf("preflight = %d headers=%v", rec.Code, rec.Header())
 	}
 }
+
+func TestSlowWaitsAndIsCapped(t *testing.T) {
+	h := newTestServer(nil)
+	start := time.Now()
+	rec := do(h, http.MethodGet, "/slow?ms=60", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /slow = %d", rec.Code)
+	}
+	if el := time.Since(start); el < 60*time.Millisecond || el > 2*time.Second {
+		t.Fatalf("slow answered after %s, want between 60ms and 2s", el)
+	}
+}

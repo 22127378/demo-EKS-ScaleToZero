@@ -1,0 +1,5 @@
+NAME                                             STATUS   ROLES    AGE     VERSION                NODEPOOL   ARCH    CAPACITY-TYPE
+ip-10-0-2-6.ap-southeast-1.compute.internal      Ready    <none>   4m46s   v1.33.13-eks-577a51e   default    arm64   spot
+ip-10-0-23-174.ap-southeast-1.compute.internal   Ready    <none>   48s     v1.33.13-eks-577a51e   default    amd64   spot
+ip-10-0-31-107.ap-southeast-1.compute.internal   Ready    <none>   3h58m   v1.33.13-eks-577a51e              amd64   
+ip-10-0-5-163.ap-southeast-1.compute.internal    Ready    <none>   3h58m   v1.33.13-eks-577a51e              amd64   

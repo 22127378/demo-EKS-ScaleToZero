@@ -1,0 +1,13 @@
+== install
+  [ ok ] nginx      image=nginx:1.27 port=80 detect-arch=auto ran on amd64 node
+  [ ok ] echo       image=hashicorp/http-echo:latest port=5678 detect-arch=auto ran on amd64 node
+  [ ok ] amd64only  image=gcr.io/google-samples/hello-app:1.0 port=8080 detect-arch=amd64 ran on amd64 node
+== HTTP from inside the cluster
+  [ ok ] plug-nginx.demo-plug -> 200
+  [ ok ] plug-echo.demo-plug -> 200
+  [ ok ] plug-amd64only.demo-plug -> 200
+== negative control: an amd64-only image forced onto arm64 must NOT run
+  [ ok ] wrong-arch pod is not Ready (CrashLoopBackOffError)
+== cleanup
+RESULT: all checks passed
+exit=0

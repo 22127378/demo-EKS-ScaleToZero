@@ -50,41 +50,86 @@ export async function ping(): Promise<Reply> {
   }
 }
 
-export interface DbReply {
-  ok: boolean;
-  latencyMs: number; // round trip seen by the browser
-  visits?: number;
-  dbLatencyMs?: number; // time the API spent on the database query
-  pod?: string;
-  error?: string;
+// ---- recruitment domain -----------------------------------------------------------------
+
+export interface Position {
+  id: number;
+  title: string;
+  department: string;
+  location: string;
+  status: "open" | "closed";
 }
 
-// getDb calls GET /db, which increments a visit counter in the database.
-export async function getDb(): Promise<DbReply> {
-  const t0 = performance.now();
-  try {
-    const res = await call("/db");
-    const latencyMs = Math.round(performance.now() - t0);
-    const body = (await res.json().catch(() => ({}))) as { visits?: number; dbLatencyMs?: number; pod?: string; error?: string };
-    if (!res.ok) return { ok: false, latencyMs, error: body.error ?? `HTTP ${res.status}` };
-    return { ok: true, latencyMs, visits: body.visits, dbLatencyMs: body.dbLatencyMs, pod: body.pod };
-  } catch (e) {
-    return { ok: false, latencyMs: Math.round(performance.now() - t0), error: String(e) };
-  }
+export interface Applicant {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  skills: string[];
 }
 
-export async function burn(ms: number): Promise<string> {
-  const res = await call(`/burn?ms=${ms}`);
-  return res.ok ? `burned ${ms} ms` : `HTTP ${res.status}`;
+export interface Application {
+  id: number;
+  applicantId: number;
+  positionId: number;
+  status: string;
+  screeningStatus: string;
+  screeningScore: number | null;
 }
 
-export async function sendJobs(count: number): Promise<string> {
-  const res = await call("/jobs", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ count, payload: "demo" }),
-  });
-  if (res.ok) return `enqueued ${count} job(s)`;
+export interface Page<T> {
+  items: T[];
+  total: number;
+}
+
+export interface Summary {
+  applicants: number;
+  positionsOpen: number;
+  positionsClosed: number;
+  applications: number;
+  screeningQueued: number;
+  screeningDone: number;
+}
+
+export interface TopPosition {
+  positionId: number;
+  title: string;
+  applications: number;
+}
+
+// apiJson calls the API and returns the parsed body; any non-2xx answer throws an Error that
+// carries the message the API sent (its { "error": "..." } field) so the page can show it.
+export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = init?.body ? { "Content-Type": "application/json" } : undefined;
+  const res = await call(path, { ...init, headers });
   const body = (await res.json().catch(() => ({}))) as { error?: string };
-  return `HTTP ${res.status}${body.error ? `: ${body.error}` : ""}`;
+  if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+  return body as T;
 }
+
+export const listPositions = () => apiJson<Page<Position>>("/positions?limit=50");
+export const listApplicants = () => apiJson<Page<Applicant>>("/applicants?limit=50");
+export const listApplications = () => apiJson<Page<Application>>("/applications?limit=50");
+export const getSummary = () => apiJson<Summary>("/stats/summary");
+export const getByStatus = () => apiJson<Record<string, number>>("/stats/applications-by-status");
+export const getTopPositions = () => apiJson<{ items: TopPosition[] }>("/stats/top-positions?limit=5");
+
+export const createPosition = (p: { title: string; department: string; location: string }) =>
+  apiJson<Position>("/positions", { method: "POST", body: JSON.stringify(p) });
+export const closePosition = (id: number) => apiJson<Position>(`/positions/${id}/close`, { method: "POST" });
+export const createApplicant = (a: { name: string; email: string; phone: string; skills: string[] }) =>
+  apiJson<Applicant>("/applicants", { method: "POST", body: JSON.stringify(a) });
+export const createApplication = (applicantId: number, positionId: number) =>
+  apiJson<Application>("/applications", { method: "POST", body: JSON.stringify({ applicantId, positionId }) });
+export const setApplicationStatus = (id: number, status: string) =>
+  apiJson<Application>(`/applications/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+// screen queues a scoring job on SQS; a worker scores it later (screeningStatus becomes "done").
+export const screen = (id: number) =>
+  apiJson<{ screeningStatus: string }>(`/applications/${id}/screen`, { method: "POST" });
+export const seed = () => apiJson<{ applicants: number; positions: number; applications: number }>("/seed", { method: "POST" });
+
+// The API answers 204 with no body for deletes; apiJson tolerates the empty body.
+// Deleting a position or an applicant also deletes the applications that point at it (ON DELETE CASCADE).
+export const deleteApplicant = (id: number) => apiJson<unknown>(`/applicants/${id}`, { method: "DELETE" });
+export const deletePosition = (id: number) => apiJson<unknown>(`/positions/${id}`, { method: "DELETE" });
+export const deleteApplication = (id: number) => apiJson<unknown>(`/applications/${id}`, { method: "DELETE" });

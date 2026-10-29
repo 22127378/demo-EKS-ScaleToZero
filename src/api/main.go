@@ -123,6 +123,7 @@ func (s *server) routes() http.Handler {
 		_, _ = w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("GET /burn", s.burn)
+	mux.HandleFunc("GET /slow", s.slow)
 	mux.HandleFunc("POST /jobs", s.jobs)
 	mux.HandleFunc("GET /db", s.dbVisit)
 	s.registerDomain(mux)
@@ -155,6 +156,26 @@ func (s *server) burn(w http.ResponseWriter, r *http.Request) {
 		n++ // busy loop on purpose
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"pod": s.pod, "burnedMs": d.Milliseconds(), "iterations": n})
+}
+
+// slow answers after ?ms= milliseconds (default 1000, capped) without using CPU. It stands in for a request that takes
+// a while (a report, a call to a slow dependency): many of them in flight at once is what makes the HTTP autoscaler
+// add pods, which fast requests never do.
+func (s *server) slow(w http.ResponseWriter, r *http.Request) {
+	ms, err := strconv.Atoi(r.URL.Query().Get("ms"))
+	if err != nil || ms <= 0 {
+		ms = 1000
+	}
+	d := time.Duration(ms) * time.Millisecond
+	if d > maxBurn {
+		d = maxBurn
+	}
+	select {
+	case <-time.After(d):
+	case <-r.Context().Done():
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"pod": s.pod, "waitedMs": d.Milliseconds()})
 }
 
 // dbVisit increments the visit counter in the database and reports how long that took.

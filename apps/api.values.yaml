@@ -3,7 +3,7 @@
 # (they contain the AWS account id and resource names).
 image:
   repository: demo-api
-  tag: 0.3.0
+  tag: 0.3.4
 arch: auto
 containerPort: 8080
 probe:

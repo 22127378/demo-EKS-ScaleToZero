@@ -12,6 +12,10 @@
 //   DURATION   test length (default 5m)
 //   THINK_S    think time between iterations in seconds (default 1)
 //   WITH_DB    set to 1 to also call GET /db on the API
+//   WITH_SLOW  set to 1 to also call GET /slow?ms=SLOW_MS on the API. Fast requests never reach the HTTP autoscaler's
+//              target (100 requests in flight per pod): 200 users with a 1 s think time keep only about ten in flight.
+//              Slow requests (SLOW_MS, default 2000) keep over a hundred in flight, which is what makes the API scale to 2 pods.
+//   SLOW_MS    how long each /slow request waits in milliseconds (default 2000)
 //   WITH_DOMAIN  set to 1 to also read the recruitment data (positions, applicants, stats) and
 //              create an applicant now and then; the test seeds demo data first
 import http from "k6/http";
@@ -23,6 +27,7 @@ if (!BASE_URL) {
 }
 const API_BASE = __ENV.API_BASE || `${BASE_URL}/api`;
 const THINK_S = Number(__ENV.THINK_S || 1);
+const SLOW_MS = Number(__ENV.SLOW_MS || 2000);
 
 export const options = {
   scenarios: {
@@ -62,6 +67,12 @@ export default function () {
   if (__ENV.WITH_DB === "1") {
     const db = http.get(`${API_BASE}/db`, { tags: { kind: "light", target: "db" } });
     check(db, { "api /db 200": (r) => r.status === 200 });
+  }
+
+  if (__ENV.WITH_SLOW === "1") {
+    // Not tagged "light": these requests are slow on purpose and must not count against the latency thresholds.
+    const slow = http.get(`${API_BASE}/slow?ms=${SLOW_MS}`, { tags: { kind: "slow", target: "slow" } });
+    check(slow, { "api /slow 200": (r) => r.status === 200 });
   }
 
   if (__ENV.WITH_DOMAIN === "1") {

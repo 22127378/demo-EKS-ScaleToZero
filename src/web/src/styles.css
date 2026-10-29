@@ -31,7 +31,7 @@ body {
   font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
 h1 { margin: 0 0 4px; font-size: 24px; }
 h2 { margin: 0 0 12px; font-size: 16px; }
 .muted { color: var(--muted); margin: 4px 0 16px; }
@@ -78,3 +78,38 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 600; }
 td { font-variant-numeric: tabular-nums; word-break: break-all; }
+
+.section-title { margin: 0 0 4px; font-size: 18px; }
+
+.tabs { display: flex; gap: 8px; margin: 0 0 16px; }
+button.tab { background: transparent; color: var(--text); border: 1px solid var(--line); }
+button.tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+button.small { padding: 3px 10px; font-size: 13px; }
+button:disabled { opacity: 0.6; cursor: default; }
+
+input[type="text"], input[type="email"], input:not([type]), select {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  max-width: 100%;
+}
+form.row input:not([type]), form.row input[type="email"] { flex: 1 1 140px; min-width: 0; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.tile-value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .muted { margin: 0; font-size: 13px; }
+
+section.card { overflow-x: auto; }
+
+.bar { height: 14px; border-radius: 7px; background: var(--line); overflow: hidden; margin: 8px 0; }
+.bar-fill { height: 100%; background: var(--ok); transition: width 60ms linear; }
+.bad-bg { background: var(--bad); }
+
+section.activity { position: sticky; top: 0; z-index: 5; }
+.activity .big { font-size: 56px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+
+button.danger { background: var(--bad); }
