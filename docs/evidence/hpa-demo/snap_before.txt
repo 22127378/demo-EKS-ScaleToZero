@@ -1,2 +1,0 @@
-NAME       REFERENCE             TARGETS              MINPODS   MAXPODS   REPLICAS   AGE
-hpa-demo   Deployment/hpa-demo   cpu: <unknown>/50%   1         3         1          24s

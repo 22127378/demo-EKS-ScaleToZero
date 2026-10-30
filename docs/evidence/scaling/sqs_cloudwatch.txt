@@ -1,4 +1,0 @@
-NumberOfMessagesSent 504.0
-NumberOfMessagesReceived 504.0
-NumberOfMessagesDeleted 504.0
-DLQ_MessagesSent 0.0

@@ -1,6 +1,0 @@
-$ kubectl get nodeclaim -o wide
-NAME            TYPE        CAPACITY   ZONE              NODE                                             READY   AGE     IMAGEID                 ID                                           NODEPOOL   NODECLASS   DRIFTED
-default-6cwjh   t3.medium   spot       ap-southeast-1c   ip-10-0-46-236.ap-southeast-1.compute.internal   True    3h52m   ami-0b1988268abc044b3   aws:///ap-southeast-1c/i-0413228afd3d7d2b0   default    default     
-default-fjpzt   c7g.large   spot       ap-southeast-1a   ip-10-0-7-166.ap-southeast-1.compute.internal    True    55m     ami-0cfb5d0ee50ea6e01   aws:///ap-southeast-1a/i-09d9899e26d31efe6   default    default     
-default-t484t   t3.medium   spot       ap-southeast-1a   ip-10-0-3-182.ap-southeast-1.compute.internal    True    43s     ami-0b1988268abc044b3   aws:///ap-southeast-1a/i-027015b754e78a226   default    default     
-default-t9f2c   t4g.large   spot       ap-southeast-1c   ip-10-0-35-242.ap-southeast-1.compute.internal   True    43s     ami-0cfb5d0ee50ea6e01   aws:///ap-southeast-1c/i-072ec2622d52c7aaa   default    default     

@@ -1,1 +1,0 @@
-scaledownPeriod=300 min=0 max=2

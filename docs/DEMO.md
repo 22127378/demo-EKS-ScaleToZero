@@ -142,8 +142,7 @@ curl -s -o /dev/null -H "Host: api.demo.local" -w "http=%{http_code} total=%{tim
 - `-w "http=%{http_code} total=%{time_total}s\n"`: sau khi xong, in mã HTTP và **tổng thời gian** của request.
 - Lệnh đầu gặp API ở 0 pod nên chờ pod khởi động (cold start); lệnh thứ hai gặp API đã chạy nên rất nhanh. So hai con số là thấy cold start.
 
-**Người xem thấy:** **Terminal 1** cho thấy pod `api` xuất hiện rồi chạy; request đầu mất khoảng 2 đến 3 giây (kết quả đo:
-trung vị 2,16 giây, 19/20 lượt dưới 3 giây; kiểm tra lại 2 lượt trên cluster này: 2,21 và 2,13 giây), request sau gần như tức thì.
+**Người xem thấy:** **Terminal 1** cho thấy pod `api` xuất hiện rồi chạy; request đầu chậm hơn các request sau (số đo ở [TEST_LOG.md](TEST_LOG.md) bài 2), request sau gần như tức thì.
 Sau 5 phút không dùng, pod tự biến mất (nhìn **Terminal 1**).
 
 **Phương án nhanh (không phải chờ 5 phút), chạy ở Terminal 4 trước buổi demo:**
@@ -162,7 +161,7 @@ helm upgrade fe charts/app -n demo --reuse-values --set scaling.hpa.scaleDownSta
 - `--force-conflicts` (chỉ ở `api`): cho phép Helm ghi đè trường mà KEDA cũng sửa; thiếu nó Helm báo xung đột.
 Nói rõ với khán giả là đã hạ thời gian chờ để demo cho nhanh.
 
-**Trung thực khi trả lời câu hỏi:** có 1/20 lượt đo được 3,07 giây, nên không nói "luôn dưới 3 giây".
+**Trung thực khi trả lời câu hỏi:** xem số đo bài 2 trong TEST_LOG.md; chỉ nói "luôn dưới 3 giây" nếu mọi lượt đo đều dưới 3 giây.
 
 ## 4. Karpenter: thêm và bớt node (3 phút)
 
@@ -192,8 +191,8 @@ time kubectl -n tier-test rollout status deployment/karpenter-probe --timeout=24
 
 - `kubectl create namespace tier-test`: tạo vùng riêng cho bài thử, để dọn một lần bằng cách xoá cả vùng.
 - Khối `cat <<'EOF' | kubectl apply -f -`: tạo một Deployment `karpenter-probe` gồm **5 pod**, mỗi pod xin **1500m CPU** (nhiều hơn chỗ trống trên các node có sẵn). Pod chạy `pause` (container rỗng, không làm gì), chỉ để chiếm chỗ. `nodeSelector` ép chúng vào pool `default`.
-- `kubectl ... rollout status`: **chờ** đến khi đủ 5 pod sẵn sàng; trong lúc chờ Karpenter tạo node mới. `time` in tổng thời gian chờ (đo được khoảng 36 giây).
-Nhìn **Terminal 2** trong lúc chờ: node mới xuất hiện (đo được khoảng 36 giây cho 5 pod sẵn sàng).
+- `kubectl ... rollout status`: **chờ** đến khi đủ 5 pod sẵn sàng; trong lúc chờ Karpenter tạo node mới. `time` in tổng thời gian chờ.
+Nhìn **Terminal 2** trong lúc chờ: node mới xuất hiện (thời gian cho 5 pod sẵn sàng: xem TEST_LOG.md bài 4).
 
 **Bước 2, chỉ chạy SAU khi bước 1 báo xong** (nếu dán cả hai bước một lượt thì pod bị xoá trước khi Karpenter kịp tạo node và không có gì để xem):
 ```bash
@@ -218,7 +217,7 @@ kubectl -n karpenter logs -l app.kubernetes.io/name=karpenter --tail=-1 \
 
 ## 5. KEDA với SQS: worker từ 0 lên 20 (3 phút)
 
-**Nói:** worker mặc định 0 pod. Có message trong hàng đợi thì KEDA bật worker, tối đa 20, mỗi worker xử lý khoảng 5 message.
+**Nói:** worker mặc định 0 pod. Có message trong hàng đợi thì KEDA bật worker, tối đa 20, mỗi Job xử lý tối đa 10 message.
 
 **Chạy ở Terminal 4** (nhìn Terminal 1, 2, 3 trong lúc chạy):
 ```bash
@@ -271,12 +270,12 @@ kubectl -n hpa-demo run load --image=curlimages/curl:8.10.1 --restart=Never --co
 watch -n 3 'kubectl -n hpa-demo get hpa,pods'
 ```
 
-Làm mới mỗi 3 giây: cột `TARGETS` của HPA là CPU hiện tại so với mục tiêu (ví dụ `130%/50%`), cột `REPLICAS` là số pod; danh sách pod bên dưới cho thấy pod mới xuất hiện.
+Làm mới mỗi 3 giây: cột `TARGETS` của HPA là CPU hiện tại so với mục tiêu (ví dụ `80%/50%`), cột `REPLICAS` là số pod; danh sách pod bên dưới cho thấy pod mới xuất hiện.
 (Terminal 1 chỉ theo dõi namespace `demo`, không thấy `hpa-demo`, nên cần lệnh này; nhớ chạy `export KUBECONFIG=/tmp/demo.kubeconfig` trước ở terminal phụ.)
 
 Tải này nhẹ có chủ đích: một vòng lặp đốt CPU 1 giây rồi nghỉ 2 giây (khoảng 330m CPU), vừa đủ để HPA dừng ở **3 pod** thay vì chạm trần.
 
-**Người xem thấy:** CPU lên khoảng 130% so với mức pod xin, HPA đi từ 1 lên 2 rồi 3 pod trong khoảng 30 giây (mỗi bước có sự kiện `SuccessfulRescale`), sau đó CPU rơi về quanh mức mục tiêu 50% và số pod giữ nguyên 3.
+**Người xem thấy:** CPU vượt ngưỡng 50% so với mức pod xin, HPA thêm pod từng bước (mỗi bước có sự kiện `SuccessfulRescale`), sau đó CPU rơi về quanh mức mục tiêu 50% và số pod giữ nguyên 3.
 Sau khi hết tải (150 giây) và hết cửa sổ ổn định 60 giây, HPA giảm về 1.
 
 **Dọn sau demo, chạy ở Terminal 4:**
@@ -322,7 +321,7 @@ scripts/spot-loss-test.sh
 - Mỗi 3 giây ghi số node Ready, pod frontend, pod API, pod giữ chỗ; dừng khi cụm hồi phục 3 lần liên tiếp (tối đa 4 phút), rồi lưu nhật ký Karpenter.
 - Kết quả lưu ở `docs/evidence/spot-loss/`; `summary.txt` đếm số request không trả HTTP 200 theo từng đường.
 
-**Số đo đã có** (`docs/evidence/spot-loss/`): frontend lỗi khoảng 12 giây, 3 request không phải 200, hồi phục sau khoảng 2 phút 33 giây.
+**Số đo:** xem TEST_LOG.md bài 9 (`docs/evidence/spot-loss/`) sau khi đo.
 
 **Người xem thấy:** **Terminal 2** node mất đi rồi Karpenter tạo node thay; **Terminal 1** pod frontend chạy lại ở node khác.
 Frontend chỉ có 1 pod nên **có thể có một khoảng ngắn ALB trả lỗi 502/503** trước khi pod mới sẵn sàng; hãy đọc `summary.txt` và
@@ -330,7 +329,7 @@ Frontend chỉ có 1 pod nên **có thể có một khoảng ngắn ALB trả l�
 
 ## 9. 200 user cùng lúc (3 phút)
 
-**Nói:** k6 giả lập 200 user vào trang web và API qua ALB. Kết quả đã đo: 0 lỗi, p95 từ 120 đến 314 ms.
+**Nói:** k6 giả lập 200 user vào trang web và API qua ALB. Số đo: xem TEST_LOG.md bài 7.
 Cơ sở dữ liệu gần chạm giới hạn 2 ACU ở bài nặng nhất, nên 200 user là gần trần của cấu hình hiện tại.
 
 **Chạy ở Terminal 4** (bản rút gọn 2 phút để khỏi chờ lâu):
@@ -360,8 +359,8 @@ aws cloudwatch get-metric-statistics --region ap-southeast-1 --namespace AWS/RDS
 
 **Người xem thấy ở lệnh trên:** ACU tăng từ khoảng 0,5 lên gần hoặc chạm 2,0 trong lúc có tải rồi hạ dần sau đó. Chạm trần 2,0 nghĩa là database là điểm nghẽn tiếp theo.
 
-**Người xem thấy:** **Terminal 1** cho thấy API lên 2 pod sau khoảng 15 giây (đo được: 1 → 2 pod, giữ đến hết bài), frontend có thể lên 2 pod; kết quả k6 ở **Terminal 4** cuối bài có
-`http_req_failed` gần 0% và p95 dưới 1 giây.
+**Người xem thấy:** **Terminal 1** cho thấy API lên 2 pod sau khoảng 15 giây (xem số pod đo được ở TEST_LOG.md bài 7), frontend có thể lên 2 pod; kết quả k6 ở **Terminal 4** cuối bài có
+`http_req_failed` và p95 để đối chiếu với TEST_LOG.md.
 
 ## 10. Tổng kết (1 phút)
 
@@ -369,7 +368,7 @@ aws cloudwatch get-metric-statistics --region ap-southeast-1 --namespace AWS/RDS
 |---|---|
 | API Go 32 endpoint, frontend React, ALB | Đạt |
 | Ba tầng co giãn (Karpenter, KEDA với SQS, HPA) | Đạt, có bằng chứng |
-| API scale to zero, cold start dưới 3 giây | Đạt phần lớn (19/20 lượt) |
+| API scale to zero, cold start dưới 3 giây | Xem TEST_LOG.md bài 1 và 2 |
 | 200 user cùng lúc | Đạt, database gần hết dư địa |
 | Toàn bộ node spot, amd64 và arm64 | Đạt |
 | Chart dùng được với image bất kỳ | Đạt với dịch vụ HTTP (phần 7) |
@@ -380,10 +379,10 @@ aws cloudwatch get-metric-statistics --region ap-southeast-1 --namespace AWS/RDS
 ## 11. Câu hỏi hay gặp
 
 - **"Sao không luôn giữ 1 pod API cho nhanh?"** Yêu cầu là scale to zero. Đặt `min: 1` sẽ hết cold start nhưng mất tính tiết kiệm.
-- **"Spot bị thu hồi thì sao?"** Xem phần 8. Số đo thật: tắt node chứa pod frontend thì frontend lỗi khoảng 12 giây (3 request), tự hồi phục, đủ 4 node và 2 pod giữ chỗ sau khoảng 2 phút 33 giây; API không bị ảnh hưởng vì không nằm trên node đó. Chưa thử mất cả hai node hệ thống cùng lúc.
+- **"Spot bị thu hồi thì sao?"** Xem phần 8. Số đo: xem TEST_LOG.md bài 9. Chưa thử mất cả hai node hệ thống cùng lúc.
 - **"Route 53 đâu?"** Chưa có tên miền; hiện dùng DNS của ALB. Có tên miền thì gắn chỉ mất một bước Terraform.
 - **"Sao cold start 2 đến 3 giây?"** Khoảng 1 giây là pod khởi động, phần còn lại là KEDA phát hiện request, interceptor chuyển tiếp và mạng.
-  Đã bỏ startupProbe (giảm trung vị từ 2,97 xuống 2,06 giây).
+  Đã bỏ startupProbe của API (số đo: TEST_LOG.md bài 2).
 
 ## 12. Dọn dẹp sau demo (bắt buộc, để ngừng tốn tiền)
 
@@ -414,4 +413,21 @@ Sau khi huỷ, 3 terminal theo dõi sẽ báo lỗi kết nối; bấm Ctrl+C đ
 | **Score** | Đẩy việc chấm điểm sàng lọc vào hàng đợi SQS. Worker bật từ 0 pod, ghi điểm về sau vài chục giây. Điểm là giả lập (công thức cố định theo mã hồ sơ). |
 | **Delete** (vị trí, ứng viên, hồ sơ) | Xoá bản ghi sau khi xác nhận. Xoá vị trí hoặc ứng viên cũng xoá các hồ sơ liên quan. |
 
-Mỗi nút gọi API đều hiện **thời gian trả lời** ở khung trên cùng và ghi vào bảng **Activity** ở cuối trang.
+Đầu trang có **hai khung đo thời gian riêng**:
+- **API response time** (bên trái): thời gian API trả lời mỗi thao tác, kèm nhãn Cold start hoặc Warm.
+- **Worker scoring time** (bên phải): bấm Score thì đồng hồ chạy từ lúc bấm đến lúc điểm xuất hiện (chờ hàng đợi, khởi động worker nếu đang 0 pod, chấm điểm). Không gồm lời gọi API.
+
+Mọi thao tác đều ghi vào bảng **Activity** ở cuối trang, cột **Source** cho biết là `API (cold start)`, `API (warm)` hay `Worker`.
+
+## Giám sát và log (Prometheus, Grafana, Loki)
+
+Chạy trên hai node hệ thống, không mở ra internet. Mở bằng port-forward ở một terminal riêng:
+```bash
+kubectl -n monitoring port-forward svc/grafana 3000:80
+kubectl -n monitoring get secret grafana -o jsonpath='{.data.admin-password}' | base64 -d; echo
+```
+Mở http://localhost:3000, đăng nhập user `admin`.
+
+- **Explore > Prometheus:** số liệu pod, node, KEDA (`keda_scaler_metrics_value`, `keda_scaler_active`), Karpenter (`karpenter_nodes_*`, `karpenter_nodeclaims_*`), HPA (`kube_horizontalpodautoscaler_*`).
+- **Explore > Loki:** log của pod ứng dụng, KEDA, Karpenter và sự kiện Kubernetes. Ví dụ LogQL: `{namespace="demo", app="worker"}`, `{namespace="karpenter"} |= "nodeclaim"`, `{job="loki.source.kubernetes_events"}`.
+- Log nằm trong bucket S3 `demo-logs-<mã tài khoản>`, tự xoá sau 7 ngày, nên vẫn tìm lại được log của pod API và worker đã về 0 pod. Loki ghi lên S3 theo lô, nên log rất mới có thể chưa lên S3 trong lúc pod Loki còn giữ.

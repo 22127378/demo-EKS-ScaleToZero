@@ -1,5 +1,0 @@
-$ kubectl -n demo get hpa
-NAME              REFERENCE           TARGETS             MINPODS   MAXPODS   REPLICAS   AGE
-fe                Deployment/fe       cpu: 47%/50%        1         2         1          3h42m
-keda-hpa-api      Deployment/api      0/100 (avg)         1         2         1          3h42m
-keda-hpa-worker   Deployment/worker   <unknown>/5 (avg)   1         20        0          74m

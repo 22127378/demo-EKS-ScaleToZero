@@ -1,3 +1,0 @@
-run,mode,http,total_s,connect_s,ttfb_s,arch,pod_created_after_request_s,created_to_scheduled_s,created_to_ready_s
-1,direct,200,2.210328,0.131319,2.210218,?,0.34,0,1
-2,direct,200,2.126625,0.094940,2.126429,?,0.27,0,1

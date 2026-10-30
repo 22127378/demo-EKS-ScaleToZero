@@ -1,9 +1,0 @@
-$ kubectl -n demo get scaledobject,hpa
-NAME                          SCALETARGETKIND      SCALETARGETNAME   MIN   MAX   READY   ACTIVE   FALLBACK   PAUSED   TRIGGERS        AUTHENTICATIONS   AGE
-scaledobject.keda.sh/api      apps/v1.Deployment   api               0     2     True    False    False      False    external-push                     3h50m
-scaledobject.keda.sh/worker   apps/v1.Deployment   worker            0     20    True    False    False      False    aws-sqs-queue   worker-aws        82m
-
-NAME                                                  REFERENCE           TARGETS             MINPODS   MAXPODS   REPLICAS   AGE
-horizontalpodautoscaler.autoscaling/fe                Deployment/fe       cpu: 1%/50%         1         2         1          3h50m
-horizontalpodautoscaler.autoscaling/keda-hpa-api      Deployment/api      0/100 (avg)         1         2         1          3h50m
-horizontalpodautoscaler.autoscaling/keda-hpa-worker   Deployment/worker   <unknown>/5 (avg)   1         20        0          82m

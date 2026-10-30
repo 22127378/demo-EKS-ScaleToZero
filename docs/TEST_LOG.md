@@ -1,882 +1,193 @@
-# Nhật ký kết quả: API scale to zero, cold start, 200 user và bằng chứng co giãn
+# Nhật ký kiểm thử
 
-Tạo lúc 2026-10-26 15:21 (giờ máy). Tài khoản `728384804953`, vùng `ap-southeast-1`, cluster `demo`.
-File này gồm: (1) **API tự về 0 pod khi không dùng và tự bật lại khi có request** (scale to zero); (2) **thời gian bật lại (cold start)**, ghi từng lượt; (3) **200 user cùng lúc**; (4) **bằng chứng ba tầng co giãn** (HPA, Karpenter, KEDA với SQS); (5) tổng kết hệ thống.
-Mọi con số lấy từ dữ liệu thật đã lưu trong `docs/results/` hoặc từ truy vấn chạy ngay lúc tạo file. Không có số nào được làm tròn cho đẹp.
+Toàn bộ số đo cũ đã được xoá để đo lại từ đầu bằng cấu hình hiện tại. Mỗi bài dưới đây có **mục đích**, **cách test**, **kết quả không chứng minh** và một bảng kết quả đang để trống (`chưa đo`). Điền số vào đúng bảng ngay sau khi đo, và lưu dữ liệu thô vào thư mục `docs/evidence/` hoặc `docs/results/` đã nêu.
 
-## Kết luận ngắn, nói thẳng
+## Trước khi đo
 
-- **API scale to zero: đạt.** Với cấu hình thật (chờ 300 giây), API lên 1 pod khi có request và **về 0 pod đúng 300 giây sau request cuối** (xem mục 1), và sự kiện của KEDA cho thấy chu kỳ trước đó cũng giống vậy (xem mục 1).
-- **Dưới 3 giây: phần lớn đạt.** Lần 4: 19/20 lượt dưới 3 giây (lượt chậm nhất 3,07 giây, thời gian kết nối TCP của lượt đó chỉ 0,11 giây, nên đó là chậm thật của hệ thống, không phải do mạng).
-- **200 user: đạt cả ba bài** (5 phút qua ALB, 3 phút có `/db`, 3 phút có các endpoint domain): 0 lỗi, p95 từ 120 đến 314 ms, p99 từ 306 đến 327 ms. **Lưu ý:** database đã chạm mức tối đa đã đặt (2,0 ACU) và CPU của nó lên tới 92,6% ở bài C, nên 200 user là gần giới hạn của cấu hình hiện tại (xem mục 4).
+- Chạy `aws sts get-caller-identity`: phải ra mã tài khoản. Phiên hết hạn giữa bài làm hỏng dữ liệu.
+- Cấu hình hiện tại (ghi lại khi đo, nếu khác thì ghi vào bảng kết quả):
+  - API: `scaledownPeriod`, ảnh `demo-api` tag, tối đa 2 pod.
+  - Frontend: HPA 1 đến 2 pod, CPU 50%.
+  - Worker: pool `default`, `pollingInterval`, `cooldownPeriod`, startup probe, tối đa 20 pod, `queueLength` 5.
+  - Image prepuller đã trỏ đúng tag trong ECR.
+- Đo trên cụm ổn định (đủ 4 node, mọi pod Ready). Mỗi bài đo ít nhất 5 lượt nếu là bài thời gian.
 
-## Số liệu trong log nằm ở file nào
+## Số liệu nằm ở file nào
 
-Tất cả đường dẫn tính từ thư mục gốc của dự án. File **dữ liệu thô** là thứ có thể mở ra đối chiếu với con số trong log.
+| Bài | Dữ liệu thô sẽ lưu ở |
+|---|---|
+| 1. API scale to zero | `docs/evidence/scale-to-zero/` |
+| 2. Cold start API | `docs/results/cold-start-api.csv` |
+| 3. Cold start worker | `docs/evidence/worker-cold-start/results.csv` |
+| 4. Karpenter | `docs/evidence/karpenter/` |
+| 5. HPA | `docs/evidence/hpa/` |
+| 6. KEDA với SQS | `docs/evidence/keda-sqs/` |
+| 7. 200 user cùng lúc | `docs/results/load-*.txt` và `docs/evidence/load-*/` |
+| 8. Aurora ACU | `docs/evidence/aurora-acu/` |
+| 9. Mất node spot | `docs/evidence/spot-loss/` |
+| 10. Chart với image bất kỳ | `docs/evidence/plug-image/result.txt` |
+| 11. Kiến trúc arm64 | `docs/evidence/arm64/` |
 
-| Mục trong log | Số liệu | File dữ liệu thô |
+## 1. API scale to zero
+
+> **Mục đích:** Chứng minh API tự về 0 pod sau thời gian không có request và tự bật lại khi có request mới.
+> **Cách test:** để API không nhận request, ghi số pod theo thời gian; gửi một request khi API ở 0 pod, ghi thời gian trả lời; lấy sự kiện KEDA (`KEDAScaleTargetActivated`, `KEDAScaleTargetDeactivated`) và cấu hình `scaledownPeriod`. Lệnh trong [DEMO.md](DEMO.md) phần 3.
+> **Kết quả KHÔNG chứng minh:** không chứng minh cold start dưới 3 giây ở mọi lần (xem bài 2).
+
+| Mốc | Thời điểm | Kết quả |
 |---|---|---|
-| 1. API scale to zero | số pod theo thời gian (0 → 1 → 0) | `docs/evidence/scale-to-zero/timeline.csv` |
-| | mốc gửi request và nhận phản hồi | `docs/evidence/scale-to-zero/markers.csv`, `request.txt` |
-| | cấu hình `scaledownPeriod=300` | `docs/evidence/scale-to-zero/config.txt` |
-| | sự kiện KEDA và Kubernetes (bật, tắt, pod chạy) | `docs/evidence/scale-to-zero/events.json` |
-| 2. Cold start (20 lượt) | tổng, kết nối TCP, thời gian pod sẵn sàng của từng lượt | `docs/results/cold-start-4-api32-positions.csv` |
-| 2. Kiểm tra lại (2 lượt) | như trên, trên cluster dựng lại | `docs/results/cold-start-5-recheck-2runs.csv` |
-| 3. Phần mạng của máy đo | thời gian kết nối TCP tới ALB và đích đối chứng | **không có file**: đo trực tiếp lúc viết log, chưa lưu |
-| 4. 200 user, bài A | tổng hợp k6 (số request, lỗi, p95, p99) | `docs/results/load-200vus-5m-via-alb-summary.json` |
-| | pod, node, CPU theo thời gian trong bài A | `docs/results/load-200vus-5m-cluster-monitor.csv` |
-| 4. 200 user, bài B (`/db`) | tổng hợp k6 | `docs/results/load-200vus-3m-with-db-summary.json` |
-| 4. 200 user, bài C (domain) | tổng hợp k6 | `docs/results/load-200vus-3m-domain-endpoints-summary.json` |
-| 4. 200 user, bài D (có `/slow`) | báo cáo k6 và số pod API theo thời gian | `docs/results/load-200vus-2m-slow-api-k6.txt`, `docs/results/load-200vus-2m-slow-api-timeline.csv` |
-| 4. Aurora lúc có tải (bài A đến C) | ACU, CPU, kết nối (CloudWatch) | **không có file**: truy vấn CloudWatch lúc viết log, chưa lưu |
-| 4. Bài E (200 user có database, ACU) | báo cáo k6, ACU, CPU, kết nối, số pod | `docs/evidence/aurora-acu/` (lượt đầu không chạm DB: `aurora-acu-no-db/`) |
-| 5.4 Mất node spot | request theo thời gian, trạng thái cụm, nhật ký Karpenter | `docs/evidence/spot-loss/` |
-| 5.5 Chart với image bất kỳ | kết quả script | `docs/evidence/plug-image/result.txt` |
-| 5.1 HPA frontend | số pod, CPU, đầu ra `get hpa` | `docs/evidence/scaling/timeline.csv`, `markers.csv`, `snap_hpa_*.txt`, `k6_hpa.txt` |
-| 5.1c HPA tải nhẹ (dừng ở 3 pod) | số pod, CPU, sự kiện `SuccessfulRescale` | `docs/evidence/hpa-light/timeline.csv`, `markers.csv`, `events.json` |
-| 5.1b HPA tốn CPU | số pod, CPU, sự kiện `SuccessfulRescale` | `docs/evidence/hpa-demo/timeline.csv`, `markers.csv`, `events.json`, `snap_*.txt` |
-| 5.2 Karpenter | số node, NodeClaim, nhật ký Karpenter | `docs/evidence/scaling/timeline.csv`, `markers.csv`, `karpenter.log`, `snap_karpenter_*.txt` |
-| 5.3 KEDA với SQS | hàng đợi, worker, node worker theo thời gian | `docs/evidence/scaling/timeline.csv`, `markers.csv`, `sqs_send.txt` |
-| | sự kiện KEDA/HPA của worker | `docs/evidence/scaling/events.json` |
-| | bộ đếm SQS (gửi, nhận, xoá, DLQ) | `docs/evidence/scaling/sqs_cloudwatch.txt`, `snap_sqs_*.txt` |
-| 6. Tổng kết | số node, giới hạn, over-provisioning | không phải số đo: lấy từ cấu hình (`charts/cluster-config/values.yaml`, `charts/app/values.yaml`, `apps/*.values.yaml`, `terraform/`) và từ cluster lúc viết |
+| API ở 0 pod, gửi request | chưa đo | chưa đo |
+| KEDA bật API lên 1 pod | chưa đo | chưa đo |
+| KEDA đưa API về 0 pod (`scaledownPeriod` = chưa ghi) | chưa đo | chưa đo |
 
-**Hai chỗ không kiểm chứng lại được bằng file** (mục 3 và phần Aurora ở mục 4): số liệu lấy trực tiếp lúc viết log và chưa được lưu. Cluster cũ đã huỷ, nên không truy lại được. Nếu cần, chạy lại bài đo trên cluster hiện tại để có số mới kèm file.
+## 2. Cold start API
 
-**Ghi chú về `docs/evidence/scaling/timeline.csv`:** file này chứa cả ba bài (HPA, Karpenter, SQS) cùng một chuỗi thời gian. Cột `epoch` đối chiếu được với `markers.csv` để biết mỗi bài bắt đầu và kết thúc lúc nào. Giờ trong log là giờ máy (UTC+7); `events.json` và `karpenter.log` ghi giờ UTC.
+> **Mục đích:** Đo thời gian từ lúc gửi request khi API ở 0 pod đến lúc có phản hồi, so với yêu cầu dưới 3 giây.
+> **Cách test:** `COLD_PATH='/positions?limit=10' COLD_JQ='has("items")' scripts/test-cold-start.sh 20 direct docs/results/cold-start-api.csv` (20 lượt, mỗi lượt chờ API về 0). Cần `scaledownPeriod` ngắn để đỡ chờ, rồi trả lại giá trị thật.
+> **Kết quả KHÔNG chứng minh:** đo từ một máy, một vị trí mạng; không đại diện cho mọi người dùng. Phần mạng của máy đo (khoảng vài phần trăm kết nối chậm hơn 1 giây) lẫn trong số đo.
 
-## 1. API scale to zero: tự về 0 pod khi không dùng, tự bật lại khi có request
+Đo ngày 30/10/2026 (giờ VN), qua ALB, `/positions?limit=10`, `scaledownPeriod` 10 giây, API 32 endpoint (image 0.4.0). Dữ liệu thô: `docs/results/cold-start-api.csv`.
 
-> **Mục đích:** Chứng minh API **thật sự về 0 pod** khi không có request (không tốn tài nguyên) và **tự bật lại** khi có request đầu tiên, với cấu hình thật (thời gian chờ về 0 là **300 giây**). Mục 2 sau đó đo xem việc bật lại nhanh đến đâu.
->
-> **Cách test:** Trên cluster vừa dựng lại, chờ API ở 0 pod, gửi **đúng một** request qua ALB thật, rồi **không gửi gì nữa** và ghi số pod của API mỗi ~5 giây cho đến khi về 0. Đối chiếu với sự kiện KEDA và Kubernetes ghi lại (các sự kiện này do chính KEDA tự ghi, độc lập với script đo).
->
-> **Kết quả cho thấy:** API đi **0 → 1 → 0** và khoảng cách giữa hai lần đổi trạng thái đúng bằng thời gian chờ đã cấu hình. Không có thao tác tay nào.
->
-> **Kết quả KHÔNG chứng minh:** Đây là một lần đo chi tiết, cộng với một chu kỳ trước đó trong sự kiện KEDA. Không chứng minh việc về 0 vẫn đúng khi có lưu lượng thất thường, ví dụ request đến đúng lúc đang tắt.
-
-Dữ liệu thô: `docs/evidence/scale-to-zero/`. Cấu hình lúc đo (`kubectl get httpscaledobject api`): `scaledownPeriod=300 min=0 max=2`.
-
-Lệnh:
-
-```bash
-kubectl -n demo get deploy api -o jsonpath='{.status.replicas}'     # 0 hoặc rỗng: đang ở 0 pod
-curl -s -H "Host: api.demo.local" "http://$ALB/positions?limit=1"   # request duy nhất: HTTP 200, 2,375 giây
-kubectl -n demo get pods -l app.kubernetes.io/name=api -w           # xem pod xuất hiện rồi biến mất sau 300 giây
-```
-
-| Giờ (giờ máy) | Số pod API | Ghi chú |
-|---|---|---|
-| 16:41:39 | 0 | API đang ở 0 pod |
-| 16:41:45 | 0 | gửi request (HTTP 200, tổng 2,375 giây) |
-| 16:41:51 | 1 | pod đã chạy, không gửi thêm request nào |
-| 16:42:27 đến 16:46:47 | 1 | giữ nguyên 1 pod trong lúc chờ |
-| 16:46:53 | 0 | **về 0 pod** |
-
-**Sự kiện do KEDA và Kubernetes ghi (giờ máy = giờ UTC + 7):**
-
-| Giờ | Đối tượng | Sự kiện | Ý nghĩa |
+| Chỉ số | Tổng thời gian (`total_s`) | Bỏ 6 lượt mất gói lúc kết nối (`connect_s` từ 0,5 giây) | Phía hệ thống (`total_s` trừ `connect_s`) |
 |---|---|---|---|
-| 16:41:46 | ScaledObject api | `KEDAScaleTargetActivated` | bật API từ 0 lên 1 vì có request |
-| 16:41:46 | Pod | `Scheduled`, `Pulled` (ảnh đã có sẵn trên node), `Started` | pod chạy trong chưa đầy 1 giây kể từ lúc được xếp |
-| 16:46:46 | ScaledObject api | `KEDAScaleTargetDeactivated` | đưa API từ 1 về 0 |
-| 16:46:46 | Pod | `Killing` | pod bị tắt |
+| Số lượt | 20 (cả 20 HTTP 200) | 14 | 20 |
+| Nhỏ nhất | 1,43 giây | 1,43 giây | 1,34 giây |
+| **Trung vị** | **2,40 giây** | **2,19 giây** | **2,08 giây** |
+| p95 | 3,54 giây | 2,96 giây | 2,80 giây |
+| Lớn nhất | 5,03 giây | 2,99 giây | 2,89 giây |
+| Số lượt dưới 3 giây | **17/20** | 14/14 | **20/20** |
+| Đo trên node đã có image sẵn hay node mới | node đã có image sẵn | | |
 
-**Kết luận:** từ lúc bật (16:41:46) đến lúc về 0 (16:46:46) là **đúng 300 giây**, bằng giá trị `scaledownPeriod` đã đặt. Một chu kỳ trước đó trên cùng cluster (bật 16:29:43, về 0 16:34:46, khoảng 303 giây) cho kết quả tương tự. Lần request này mất **2,375 giây** để nhận phản hồi, nằm dưới 3 giây.
+**Ý nghĩa các cột của file CSV:** `total_s` là tổng thời gian cả request; `connect_s` là thời gian mở kết nối TCP tới ALB; `ttfb_s` là thời gian đến byte đầu tiên (gồm chờ pod API bật); `pod_created_after_request_s` là pod được tạo sau request bao lâu; `created_to_scheduled_s` và `created_to_ready_s` là từ lúc tạo pod đến lúc được xếp và đến lúc Ready (độ phân giải 1 giây).
 
-## 2. API cold start: thời gian bật lại từ 0 pod (kết quả cuối cùng, từng lượt)
+**Lưu ý trung thực:** 6 trong 20 lượt (1, 5, 10, 12, 14, 18) có `connect_s` từ 0,7 đến 3,0 giây, tức là gói SYN đầu tiên tới ALB bị mất rồi thử lại: **mạng của máy đo**, không phải API. Tổng thời gian có 3 lượt vượt 3 giây (3,3 / 3,5 / 5,0 giây) đều là các lượt này hoặc gần nó; phía hệ thống cả 20 lượt đều dưới 3 giây. Trước khi đổi danh sách cho phép IP của ALB, cùng bài đo này có 5 trên 20 lượt hỏng nặng (kẹt 30 giây hoặc không kết nối được) vì máy đo ra internet bằng nhiều IP khác nhau qua Cloudflare.
 
-> **Mục đích:** Kiểm tra hai yêu cầu cùng lúc: (a) khi không có ai dùng, API **về 0 pod** (không tốn tài nguyên); (b) khi có request đầu tiên sau đó, API **bật lại và trả lời đủ nhanh** (cold start). Hai yêu cầu này đối nghịch nhau: về 0 càng triệt để thì lần gọi đầu càng phải chờ pod khởi động.
->
-> **Cách test:** Lặp 20 lượt với cấu hình cuối cùng đang chạy. Mỗi lượt: chờ API về 0 pod, gửi **đúng một** request qua ALB thật, đo thời gian. Không có pod nào chạy sẵn trước request đó, nên thời gian đo được là **toàn bộ chuỗi** khởi động.
->
-> **Kết quả cho thấy:** Cột "Tổng" là thứ người dùng cảm nhận: càng nhỏ càng tốt, và ngưỡng 3 s là mục tiêu cần đối chiếu. Bảng tóm tắt cho biết một cấu hình **thường** nhanh đến đâu (trung vị) và **tệ nhất** thế nào (p95, lớn nhất). Từng lượt cho biết cú chậm xảy ra đơn lẻ hay thường xuyên.
->
-> **Kết quả KHÔNG chứng minh:** Không đại diện cho mọi vị trí địa lý của người dùng (đo từ một máy), và không đo trường hợp chỗ trống trên node đã hết (lúc đó phải tạo node mới).
+## 3. Cold start worker
 
-### Cách đo
+> **Mục đích:** Đo thời gian từ lúc có message khi worker ở 0 pod đến khi worker xử lý xong, và độ ổn định khi nhiều Job được tạo cùng lúc.
+> **Cách test:** (a) Score đơn lẻ qua API khi worker ở 0 pod, đọc `requestedAt` và `doneAt` từ API; (b) đợt dồn: `POST /jobs {"count":100}` rồi đo thời gian từ lúc pod được xếp (`Scheduled`) đến lúc container chạy (`Started`) từ sự kiện Kubernetes lưu trong Loki, kèm lưu lượng API và frontend chạy song song qua ALB.
+> **Kết quả KHÔNG chứng minh:** mỗi cấu hình chỉ đo một đến hai lần; chưa thử 20 Job cùng lúc lặp lại nhiều lần; chưa đo trên cụm khác.
 
-Mỗi **lượt** làm đúng các bước sau (script `scripts/test-cold-start.sh`):
-1. Chờ cho Deployment `api` có **0 replica** (KEDA đã đưa API về 0 pod), rồi chờ thêm 5 giây cho ổn định.
-2. Gửi **một** request qua **ALB thật** (từ máy ngoài AWS, đi qua internet), đo `curl -w` tổng thời gian, thời gian kết nối TCP, thời gian tới byte đầu.
-3. Chỉ chấp nhận nếu phản hồi là JSON thật của API (một mã 200 từ trang frontend **không** được tính, vì từng có sự cố ALB chuyển nhầm).
-4. Đọc dấu thời gian do API server Kubernetes ghi của pod vừa được tạo để biết pod mất bao lâu từ lúc tạo đến lúc sẵn sàng (độ phân giải 1 giây).
+**(a) Score đơn lẻ (API đã thức, worker ở 0 pod, có API tạo Job ngay):**
 
-Để đo nhiều lượt trong thời gian hợp lý, thời gian chờ về 0 được hạ tạm xuống 15 giây trong lúc đo (mặc định 300 giây), rồi khôi phục.
-Đường đi của mỗi request: máy đo -> ALB -> interceptor của KEDA (giữ request) -> KEDA bật API từ 0 lên 1 -> pod khởi động -> interceptor chuyển tiếp -> phản hồi.
+| Cấu hình | Từ lúc yêu cầu đến lúc có điểm |
+|---|---|
+| Deployment, pool `worker` (chưa có node) | khoảng 55 giây pod Ready (đo trước khi dọn) |
+| Deployment, pool `default`, polling 1 giây | 6,2 đến 9,3 giây pod Ready |
+| ScaledJob, chưa có API đánh thức | 8,5 đến 9,4 giây |
+| **ScaledJob + API tạo Job ngay, pool `default`** | **1,0 đến 1,2 giây** (3 lần), mỗi lần 1 Job |
+| ScaledJob + API tạo Job ngay, pool `worker` riêng | 1,25 và 1,86 giây (2 lần) |
+| Cả API và worker cùng ngủ (pool `default`) | 3,3 / 5,0 / 3,6 giây từ lúc bấm, phần worker khoảng 1,2 đến 1,6 giây |
 
-Lệnh đã chạy (chạy lại được):
+**(b) Đợt dồn 100 message:** xem bảng đầy đủ và log trong `docs/evidence/worker-burst/` (`README.md`, `summary-by-burst.txt`, `worker-pod-events.log`).
 
-```bash
-API_SCALEDOWN=15 scripts/deploy-apps.sh install            # hạ thời gian chờ về 0 xuống 15 giây để đo nhanh
-COLD_PATH='/positions?limit=10' COLD_JQ='has("items")' \
-  scripts/test-cold-start.sh 20 direct /tmp/cold4.csv       # 20 lượt, API 32 endpoint, có kết nối database
-scripts/deploy-apps.sh install                              # trả thời gian chờ về 300 giây
-column -t -s, /tmp/cold4.csv                                # xem từng lượt
-```
+| Cấu hình | Số pod | Trung vị khởi động | Chậm nhất | Pod trên 3 giây | Lỗi cấp IP |
+|---|---|---|---|---|---|
+| Pool `default`, kho IP 3, 5 message mỗi Job | 28 | 41 giây | 111 giây | 20 | 97 |
+| Kho IP 10 và 12 | 43 | 2 giây | 39 giây | 20 | 44 |
+| + 10 message mỗi Job | 28 | 1 giây | 29 giây | 3 | 6 |
+| Pool `worker` riêng, kho IP 10 và 12, node mới | 20 | 12 giây | 40 giây | 10 | 21 |
+| Pool `worker` riêng, kho IP 10 và 30, node mới | 36 | 2 giây | 30 giây | 9 | 15 |
+| **Pool `worker` riêng, kho IP 10 và 30, node ổn định** | 30 | **1 giây** | 30 giây | **3** | **4** |
 
-### Bảng tóm tắt (giây)
+**Kết luận:** thời gian khởi động pod bình thường dưới 1 giây; phần chậm duy nhất là pod chờ cấp IP khi nhiều Job được tạo cùng lúc (sự kiện `FailedCreatePodSandBox ... failed to assign an IP address`, thử lại khoảng mỗi 12 đến 15 giây). Tăng kho IP và giảm số pod mỗi lượt giảm số pod chậm từ 71% xuống 10%, nhưng chưa về 0. Trong các đợt dồn, frontend và API gần như không lỗi (tối đa 1 request lỗi mỗi bên trong khoảng 110 đến 160 request).
 
-| Lần chạy | API | Endpoint | Số lượt | Nhỏ nhất | Trung vị | p90 | p95 | Lớn nhất | **Dưới 3 s** | Dưới 3 s (bỏ thời gian kết nối TCP) |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 4 | API mới 32 endpoint | `GET /positions?limit=10` | 20 | 1,44 | 2,16 | 2,57 | 2,60 | 3,07 | **19/20** | 20/20 |
+## 4. Karpenter: tầng node
 
-Chú thích: "bỏ thời gian kết nối TCP" trừ đi thời gian `connect` của từng lượt, để loại phần mạng của máy đo (xem mục 3).
+> **Mục đích:** Chứng minh Karpenter tạo node spot mới khi có pod không còn chỗ chạy và dọn node thừa khi hết cần.
+> **Cách test:** [DEMO.md](DEMO.md) phần 4 (5 pod, mỗi pod xin 1500m CPU, `rollout status`, rồi xoá namespace); ghi số node, NodeClaim và nhật ký Karpenter (lấy theo label, vì chỉ pod leader ghi sự kiện).
+> **Kết quả KHÔNG chứng minh:** không chứng minh xử lý khi spot hết hàng hoặc bị thu hồi (xem bài 9).
 
-### Kết quả cuối cùng: API 32 endpoint (image 0.3.0), cấu hình đang chạy, endpoint có kết nối database
+| Chỉ số | Giá trị |
+|---|---|
+| Số node `default` trước, đỉnh, sau | chưa đo |
+| Thời gian đến khi cả pod sẵn sàng | chưa đo |
+| Thời gian về số node ban đầu sau khi xoá | chưa đo |
+| Loại node và kiến trúc được tạo | chưa đo |
 
-- API: API mới 32 endpoint; endpoint: `GET /positions?limit=10`; cấu hình probe: chỉ readinessProbe (1 giây).
-- Dữ liệu thô: `docs/results/cold-start-4-api32-positions.csv`.
+## 5. HPA: tầng pod
 
-> **Mục đích:** Đảm bảo **API mới 32 endpoint** không làm cold start xấu đi. Lần gọi đầu của API mới phải kết nối database và kiểm tra/tạo bảng, nên tôi đo bằng endpoint **có chạm database** (`/positions`), là trường hợp xấu hơn endpoint `GET /` trước đó.
->
-> **Cách test:** Image `0.3.0`, cấu hình chỉ có readinessProbe, endpoint `GET /positions?limit=10`, 20 lượt. Phản hồi phải có trường `items` (JSON thật của API).
->
-> **Kết quả cho thấy:** Trung vị **2,16 s**: đã tính cả kết nối database. 19/20 lượt dưới 3 s; **một lượt 3,07 s với kết nối TCP bình thường**, tức là hệ thống thỉnh thoảng thật sự vượt 3 s.
->
-> **Kết quả KHÔNG chứng minh:** Không chứng minh được "luôn dưới 3 s": 20 mẫu chỉ cho ước lượng thô, và đã thấy ít nhất một lượt vượt.
+> **Mục đích:** Chứng minh HPA thêm pod khi CPU vượt ngưỡng 50% và giảm khi hết tải.
+> **Cách test:** [DEMO.md](DEMO.md) phần 6 (bản sao API có endpoint `/burn`, tải nhẹ: đốt CPU 1 giây, nghỉ 2 giây). Ghi số pod, CPU và sự kiện `SuccessfulRescale`.
+> **Kết quả KHÔNG chứng minh:** frontend nginx dùng rất ít CPU nên không dùng làm bằng chứng HPA; chỉ ghi nhận frontend thật lên 2 pod nếu quan sát được trong bài 7.
 
-Cột "Pod tạo sau request" là giờ tạo pod trừ giờ gửi request, sai số khoảng 1 giây vì dấu thời gian của Kubernetes chỉ chính xác đến giây (giá trị âm nhỏ đã được đưa về 0). Cột kiến trúc node để "-" khi endpoint được gọi không trả về kiến trúc (lần 4).
+| Chỉ số | Giá trị |
+|---|---|
+| Số pod 1 → ? → ? → về | chưa đo |
+| CPU đỉnh so với mức xin | chưa đo |
+| Thời gian giữa các bước | chưa đo |
 
-| Lượt | HTTP | Tổng (s) | Kết nối TCP (s) | Sau kết nối (s) | Kiến trúc node | Pod tạo sau request (s) | Pod tạo đến sẵn sàng (s) | Dưới 3 s |
+## 6. KEDA với SQS: tầng worker
+
+> **Mục đích:** Chứng minh worker tăng từ 0 lên tối đa 20 pod theo độ dài hàng đợi, không mất message, rồi về 0.
+> **Cách test:** gửi 500 message (`POST /jobs`, 5 lần count 100); ghi số worker, node, hàng đợi mỗi vài giây; lấy bộ đếm SQS (gửi, nhận, xoá) và độ dài hàng đợi lỗi. Đồng thời gửi request vào frontend và API để thấy worker có làm chậm hai thành phần này không (worker dùng chung pool `default`).
+> **Kết quả KHÔNG chứng minh:** khối lượng công việc thật; worker chỉ chấm điểm giả lập (công thức cố định), không phải xử lý nặng thật.
+
+| Chỉ số | Giá trị |
+|---|---|
+| Số worker lớn nhất | chưa đo |
+| Số node tạo thêm | chưa đo |
+| SQS gửi / nhận / xoá | chưa đo |
+| Hàng đợi lỗi | chưa đo |
+| Thời gian hàng đợi hết, về 0 pod | chưa đo |
+| Request frontend/API không phải 200 trong lúc đó | chưa đo |
+
+## 7. 200 user cùng lúc
+
+> **Mục đích:** Chứng minh hệ thống chịu 200 người dùng ảo cùng lúc, và API/frontend không vượt 2 pod.
+> **Cách test:** `docker run --rm -v "$PWD/scripts:/s:ro" grafana/k6 run -e BASE_URL=http://$ALB -e VUS=200 -e DURATION=<thời lượng> [-e WITH_SLOW=1] [-e WITH_DB=1] [-e WITH_DOMAIN=1] /s/loadtest.js`. `WITH_SLOW=1` cần để có đủ request đồng thời (mục tiêu 100 mỗi pod); `WITH_DB=1` và `WITH_DOMAIN=1` cần để chạm database. Ghi số pod mỗi 5 giây.
+> **Kết quả KHÔNG chứng minh:** không chứng minh trên 200 user; request nhanh chỉ tạo khoảng 10 request đồng thời nên không đủ để API lên 2 pod nếu thiếu `WITH_SLOW`.
+
+| Bài (cờ bật) | Thời lượng | Số request | Request/giây | Trung vị | p95 | Lỗi | API pod tối đa | Frontend pod tối đa |
 |---|---|---|---|---|---|---|---|---|
-| 1 | 200 | 2,23 | 0,19 | 2,04 | - | 0,73 | 1 | có |
-| 2 | 200 | 2,15 | 0,10 | 2,05 | - | 0,59 | 1 | có |
-| 3 | 200 | 2,15 | 0,19 | 1,96 | - | 0,52 | 1 | có |
-| 4 | 200 | 2,16 | 0,11 | 2,05 | - | 0,40 | 1 | có |
-| 5 | 200 | 1,76 | 0,20 | 1,56 | - | 0,00 | 1 | có |
-| 6 | 200 | 2,33 | 0,11 | 2,23 | - | 0,49 | 1 | có |
-| 7 | 200 | 1,95 | 0,11 | 1,85 | - | 0,05 | 1 | có |
-| 8 | 200 | 2,55 | 0,10 | 2,45 | - | 0,53 | 1 | có |
-| 9 | 200 | 2,60 | 0,10 | 2,50 | - | 0,59 | 1 | có |
-| 10 | 200 | 2,22 | 0,11 | 2,11 | - | 0,03 | 1 | có |
-| 11 | 200 | 1,87 | 0,10 | 1,76 | - | 0,65 | 0 | có |
-| 12 | 200 | 1,92 | 0,10 | 1,83 | - | 0,64 | 1 | có |
-| 13 | 200 | 1,84 | 0,11 | 1,74 | - | 0,45 | 1 | có |
-| 14 | 200 | 3,07 | 0,11 | 2,96 | - | 0,58 | 1 | **không** |
-| 15 | 200 | 2,57 | 0,10 | 2,47 | - | 0,03 | 2 | có |
-| 16 | 200 | 1,44 | 0,10 | 1,34 | - | 0,00 | 1 | có |
-| 17 | 200 | 2,16 | 0,20 | 1,96 | - | 0,51 | 1 | có |
-| 18 | 200 | 2,21 | 0,10 | 2,11 | - | 0,50 | 1 | có |
-| 19 | 200 | 2,26 | 0,16 | 2,10 | - | 0,44 | 1 | có |
-| 20 | 200 | 1,96 | 0,08 | 1,89 | - | 0,14 | 1 | có |
+| chưa đo | | | | | | | | |
 
-Lượt từ 3 giây trở lên: lượt 14 (3,07 s, kết nối 0,11 s, kết nối bình thường nên là chậm thật của hệ thống).
+## 8. Aurora ACU
 
-### Kiểm tra lại nhanh trên cluster dựng lại (chỉ 2 lượt)
+> **Mục đích:** Cho thấy Aurora co giãn dung lượng trong khoảng 0,5 đến 2 ACU khi có tải chạm database.
+> **Cách test:** chạy bài 7 với `WITH_DB=1 WITH_DOMAIN=1`; ngay sau đó đọc CloudWatch `ServerlessDatabaseCapacity`, `CPUUtilization`, `DatabaseConnections` của `demo-aurora` (lệnh trong [DEMO.md](DEMO.md) phần 9).
+> **Kết quả KHÔNG chứng minh:** CloudWatch chỉ có độ phân giải 1 phút; chạy không bật gọi database thì ACU đứng yên và không chứng minh gì.
 
-> **Mục đích:** Xác nhận cold start vẫn ở mức cũ sau khi dựng lại toàn bộ hạ tầng và đổi frontend, mà không phải chờ 20 lượt.
->
-> **Cách test:** Cùng cấu hình, cùng endpoint `GET /positions?limit=10`, thời gian chờ về 0 hạ tạm xuống 15 giây rồi trả lại 300 giây. Chỉ **2 lượt**.
->
-> **Kết quả cho thấy:** Lượt 1: **2,21 giây**, lượt 2: **2,13 giây** (kết nối TCP 0,13 và 0,09 giây); cả hai dưới 3 giây, pod sẵn sàng sau 1 giây. Khớp với lần đo 20 lượt (trung vị 2,16 giây).
->
-> **Kết quả KHÔNG chứng minh:** 2 mẫu quá ít để nói về phân bố hay lượt chậm nhất (lần 20 lượt có một lượt 3,07 giây). Chỉ dùng để kiểm tra nhanh, không thay cho bài 20 lượt.
+| Phút | ACU | CPU database | Kết nối |
+|---|---|---|---|
+| chưa đo | | | |
 
-Dữ liệu thô: `docs/results/cold-start-5-recheck-2runs.csv`.
+## 9. Mất một node spot
 
-### Thời gian đi đâu trong một lượt
+> **Mục đích:** Đo người dùng thấy gián đoạn bao lâu và cụm hồi phục sau bao lâu khi một node spot bị lấy lại đột ngột.
+> **Cách test:** `scripts/spot-loss-test.sh` (**tắt một EC2 thật**, chỉ chạy khi cụm ổn định). Ghi request frontend và API mỗi 0,5 giây, trạng thái cụm mỗi 3 giây, nhật ký Karpenter.
+> **Kết quả KHÔNG chứng minh:** đây là tắt máy đột ngột, không phải thông báo gián đoạn spot 2 phút; pod API không nằm trên node bị tắt thì không chứng minh gì cho API; chưa thử mất cả hai node hệ thống.
 
-Lần 4 (cấu hình đang chạy): pod từ lúc được tạo đến lúc sẵn sàng là **1 giây** ở 18/20 lượt (và 1 lượt 0 giây, 1 lượt 2 giây trở lên; dấu thời gian Kubernetes chỉ chính xác đến 1 giây). Trung vị tổng là 2,16 giây, nên **khoảng 1 giây còn lại nằm ngoài pod**: KEDA phát hiện request và bật API, interceptor chuyển tiếp, và mạng (round trip tới ALB khoảng 0,07 giây). Hai đoạn đầu không đo riêng được bằng dấu thời gian 1 giây, nên **chưa tách được** giữa chúng.
-
-## 3. Phần mạng của máy đo (vì sao có lượt chậm không do hệ thống)
-
-> **Mục đích:** **Tách phần chậm do mạng của máy đo** ra khỏi phần chậm do hệ thống. Nếu không tách, một lượt chậm vì mất gói tin sẽ bị tính nhầm là lỗi của cold start.
->
-> **Cách test:** Đo riêng thời gian thiết lập kết nối TCP (`curl -w %{time_connect}`) tới ALB, tới từng địa chỉ của ALB, và tới một dịch vụ AWS **không liên quan đến hệ thống** (`checkip.amazonaws.com`) làm đối chứng. Việc này không dính gì đến API hay KEDA.
->
-> **Kết quả cho thấy:** Khoảng 5 đến 10% kết nối tốn hơn 1 giây trên cả ba địa chỉ ALB lẫn đích đối chứng, nên đó là đặc tính **đường mạng của máy đo** (gói SYN bị mất rồi gửi lại), không phải lỗi hệ thống. Vì vậy các bảng ở mục 1 có cột "Kết nối TCP" và "Sau kết nối" để nhìn thời gian khi đã loại phần mạng này.
->
-> **Kết quả KHÔNG chứng minh:** Không chứng minh người dùng thật ở nơi khác sẽ không gặp lỗi tương tự; họ có đường mạng riêng của họ.
-
-Lệnh và kết quả đã ghi (tính thời gian kết nối TCP, không liên quan đến cold start):
-
-```bash
-for i in $(seq 1 100); do curl -s -o /dev/null -w '%{time_connect}\n' http://$ALB/; done | sort -n | tail -8
-# và riêng từng địa chỉ của ALB bằng: curl --resolve $ALB:80:<ip> ...  cùng một đích đối chứng không thuộc hệ thống: checkip.amazonaws.com
-```
-
-| Đích | Số kết nối | Trung vị (s) | Lớn nhất (s) | Số kết nối trên 0,5 s |
-|---|---|---|---|---|
-| ALB (cả 3 địa chỉ) | 100 | 0,078 | 2,094 | 8/100 |
-| ALB 3.1.98.202 | 40 | 0,076 | 1,069 | 2/40 |
-| ALB 54.251.190.47 | 40 | 0,072 | 3,180 | 5/40 |
-| ALB 54.254.201.5 | 40 | 0,076 | 1,090 | 4/40 |
-| `checkip.amazonaws.com` (đối chứng, không phải hệ thống của ta) | 40 | 0,076 | 1,054 | 2/40 |
-
-Khoảng 5 đến 10% kết nối từ máy đo tốn hơn 1 giây (mất gói SYN rồi gửi lại), kể cả khi gọi một dịch vụ AWS không liên quan, nên những lượt chậm có cột "Kết nối TCP" lớn là do đường mạng của máy đo, không phải do cold start.
-
-## 4. 200 user cùng lúc
-
-Dữ liệu thô: `docs/results/load-200vus-5m-via-alb-summary.json` (bài A), `load-200vus-3m-with-db-summary.json` (bài B), `load-200vus-3m-domain-endpoints-summary.json` (bài C), `load-200vus-5m-cluster-monitor.csv` (mẫu cluster trong bài A).
-
-> **Mục đích:** Kiểm tra yêu cầu **chịu được 200 user cùng lúc** trên hạ tầng thật, với các giới hạn đã đặt (tối đa 2 pod cho API và frontend).
->
-> **Cách test:** k6 chạy 200 người dùng ảo song song; mỗi người lặp: tải trang frontend, gọi API, nghỉ khoảng 1 giây. Chạy ba kịch bản tăng dần độ nặng (bài A, B, C). Đo độ trễ (trung vị, p90, p95, p99, lớn nhất) và tỉ lệ lỗi, đối chiếu với ngưỡng nghiệm thu. Song song, ghi số pod, số node và CPU của cluster và của Aurora để biết **thành phần nào chịu tải**.
->
-> **Kết quả cho thấy:** Ba bài đều không có lỗi và độ trễ nằm trong ngưỡng, nên hệ thống phục vụ được 200 user đồng thời. Bảng pod/node cho thấy API và frontend không vượt 2 pod và không cần thêm node. Số liệu Aurora cho thấy database là chỗ **gần chạm giới hạn nhất**.
->
-> **Kết quả KHÔNG chứng minh:** Không chứng minh được số user lớn hơn 200, tải kéo dài hàng giờ, hay người dùng ở nhiều nơi (đo từ một máy).
-
-Công cụ: k6 (`scripts/loadtest.js`), **200 user ảo chạy đồng thời**, mỗi user lặp lại: tải trang frontend, gọi API, nghỉ khoảng 1 giây. Chạy từ một máy ngoài AWS qua ALB thật, nên mọi độ trễ đã gồm round trip mạng của máy đó (trung vị khoảng 70 ms).
-Ngưỡng nghiệm thu (do tôi đề xuất, bạn chưa xác nhận): lỗi dưới 1%, p95 dưới 500 ms, p99 dưới 3 giây.
-
-### Bảng tóm tắt
-
-| Bài | Số user | Thời lượng | Tổng request | Lỗi | Trung vị (ms) | p90 (ms) | p95 (ms) | p99 (ms) | Lớn nhất (ms) | Kết quả |
-|---|---|---|---|---|---|---|---|---|---|---|
-| Bài A | 200 | 5 phút | 102.188 | 0 (0.00%) | 69,0 | 76,4 | 314,4 | 327,4 | 2160 | **đạt cả ba ngưỡng** |
-| Bài B | 200 | 3 phút | 85.953 | 0 (0.00%) | 70,7 | 79,5 | 306,0 | 322,3 | 2050 | **đạt cả ba ngưỡng** |
-| Bài C | 200 | 3 phút | 131.694 | 0 (0.00%) | 71,7 | 82,0 | 119,9 | 306,3 | 2270 | **đạt cả ba ngưỡng** |
-
-Ở cả ba bài, p99 chỉ 306 đến 327 ms, nghĩa là ít nhất 99% request nhanh hơn 0,33 giây. Request chậm nhất là 2,05 đến 2,27 giây (tức là có một số ít request vượt 2 giây); tôi **chưa tách riêng** nguyên nhân của chúng, nhiều khả năng là đợt đầu khi API còn ở 0 pod hoặc một lần mất gói SYN của mạng máy đo.
-
-### Bài A: 5 phút, trang frontend + API (`/api/`), API bắt đầu ở 0 pod
-
-> **Mục đích:** Kiểm tra hệ thống phục vụ được 200 user **ngay từ trạng thái nguội**: API bắt đầu ở 0 pod nên 200 request đầu tiên phải chờ API khởi động.
->
-> **Cách test:** 5 phút, mỗi vòng: tải trang frontend rồi gọi `/api/` (qua proxy của frontend, interceptor của KEDA, tới API).
->
-> **Kết quả cho thấy:** Không lỗi, p95 314 ms, p99 327 ms. API có 2 pod từ đầu bài (xem giải thích ở mục "Hệ thống phản ứng" bên dưới: đây là hiệu ứng của đợt 200 request ập vào lúc API còn ở 0 pod, không phải do tải ổn định) và frontend lên 2 pod nhờ HPA; số node không đổi, vì chỗ trống (headroom) đã có sẵn. Request chậm nhất (khoảng 2 s) là đợt đầu khi API còn ở 0 pod.
->
-> **Kết quả KHÔNG chứng minh:** Không cho biết hệ thống xử lý được bao nhiêu user tối đa; chỉ cho biết 200 là an toàn.
-
-Lệnh (chạy lúc 2026-10-26 13:07 (giờ máy)):
-
-```bash
-docker run --rm -v "$PWD/scripts:/s:ro" grafana/k6 run -e BASE_URL=http://$ALB -e VUS=200 -e DURATION=5m /s/loadtest.js
-```
-
-| Đối tượng | Trung vị (ms) | p90 (ms) | p95 (ms) | Lớn nhất (ms) |
-|---|---|---|---|---|
-| Tất cả request | 69,0 | 76,4 | 314,4 | 2160 |
-| Trang frontend | 67,8 | 74,4 | 102,1 | 2040 |
-| API (qua proxy của frontend) | 70,5 | 77,5 | 316,5 | 2160 |
-
-Phần tổng kết gốc của k6 (nguyên văn):
-
-```
-# THRESHOLDS
-    http_req_duration{kind:light}
-    [đạt] 'p(95)<500' p(95)=314.41ms
-    [đạt] 'p(99)<3000' p(99)=327.4ms
-    http_req_duration{target:api}
-    [đạt] 'p(95)<500' p(95)=316.48ms
-    http_req_duration{target:frontend}
-    [đạt] 'p(95)<500' p(95)=102.12ms
-    http_req_failed
-    [đạt] 'rate<0.01' rate=0.00%
-  # TOTAL RESULTS
-    checks_total.......: 102188  338.587531/s
-    checks_succeeded...: 100.00% 102188 out of 102188
-    checks_failed......: 0.00%   0 out of 102188
-    [đạt] frontend 200
-    [đạt] api / 200
-    HTTP
-    http_req_duration..............: avg=87.24ms min=60.08ms  med=69.02ms max=2.16s p(90)=76.43ms p(95)=314.41ms
-      { expected_response:true }...: avg=87.24ms min=60.08ms  med=69.02ms max=2.16s p(90)=76.43ms p(95)=314.41ms
-      { kind:light }...............: avg=87.24ms min=60.08ms  med=69.02ms max=2.16s p(90)=76.43ms p(95)=314.41ms
-      { target:api }...............: avg=93.3ms  min=61.6ms   med=70.47ms max=2.16s p(90)=77.48ms p(95)=316.48ms
-      { target:frontend }..........: avg=81.17ms min=60.08ms  med=67.85ms max=2.04s p(90)=74.36ms p(95)=102.12ms
-    http_req_failed................: 0.00%  0 out of 102188
-    http_reqs......................: 102188 338.587531/s
-    EXECUTION
-    iteration_duration.............: avg=1.17s   min=624.95ms med=1.17s   max=3.83s p(90)=1.57s   p(95)=1.62s
-    iterations.....................: 51094  169.293766/s
-    vus............................: 32     min=32          max=200
-    vus_max........................: 200    min=200         max=200
-    NETWORK
-    data_received..................: 56 MB  187 kB/s
-    data_sent......................: 12 MB  41 kB/s
-```
-
-### Bài B: 3 phút, thêm `GET /db` (truy vấn Aurora)
-
-> **Mục đích:** Kiểm tra **tầng database** dưới tải: Aurora có co giãn không, pool kết nối của API có đủ không.
->
-> **Cách test:** Như bài A (3 phút), thêm mỗi vòng một lần gọi `GET /db` (tăng bộ đếm trong Aurora).
->
-> **Kết quả cho thấy:** Không lỗi, p95 306 ms. Aurora tự tăng dung lượng từ 0,5 lên 2,0 ACU và pool giữ ở mức 10 kết nối; không truy vấn nào thất bại.
->
-> **Kết quả KHÔNG chứng minh:** Chưa nói gì về truy vấn phức tạp hơn một lệnh đếm.
-
-Lệnh (chạy lúc 2026-10-26 13:55):
-
-```bash
-docker run --rm -v "$PWD/scripts:/s:ro" grafana/k6 run -e BASE_URL=http://$ALB -e VUS=200 -e DURATION=3m -e WITH_DB=1 /s/loadtest.js
-```
-
-| Đối tượng | Trung vị (ms) | p90 (ms) | p95 (ms) | Lớn nhất (ms) |
-|---|---|---|---|---|
-| Tất cả request | 70,7 | 79,5 | 306,0 | 2050 |
-| Trang frontend | 68,1 | 75,7 | 84,8 | 2030 |
-| API (qua proxy của frontend) | 70,4 | 78,0 | 307,8 | 2050 |
-
-Phần tổng kết gốc của k6 (nguyên văn):
-
-```
-# THRESHOLDS
-    http_req_duration{kind:light}
-    [đạt] 'p(95)<500' p(95)=305.99ms
-    [đạt] 'p(99)<3000' p(99)=322.3ms
-    http_req_duration{target:api}
-    [đạt] 'p(95)<500' p(95)=307.76ms
-    http_req_duration{target:frontend}
-    [đạt] 'p(95)<500' p(95)=84.83ms
-    http_req_failed
-    [đạt] 'rate<0.01' rate=0.00%
-  # TOTAL RESULTS
-    checks_total.......: 85953   472.839014/s
-    checks_succeeded...: 100.00% 85953 out of 85953
-    checks_failed......: 0.00%   0 out of 85953
-    [đạt] frontend 200
-    [đạt] api / 200
-    [đạt] api /db 200
-    HTTP
-    http_req_duration..............: avg=84.83ms min=60.34ms  med=70.66ms max=2.05s p(90)=79.52ms p(95)=305.99ms
-      { expected_response:true }...: avg=84.83ms min=60.34ms  med=70.66ms max=2.05s p(90)=79.52ms p(95)=305.99ms
-      { kind:light }...............: avg=84.83ms min=60.34ms  med=70.66ms max=2.05s p(90)=79.52ms p(95)=305.99ms
-      { target:api }...............: avg=85.13ms min=61.51ms  med=70.37ms max=2.05s p(90)=78.04ms p(95)=307.76ms
-      { target:frontend }..........: avg=78.71ms min=60.34ms  med=68.12ms max=2.03s p(90)=75.67ms p(95)=84.83ms
-    http_req_failed................: 0.00% 0 out of 85953
-    http_reqs......................: 85953 472.839014/s
-    EXECUTION
-    iteration_duration.............: avg=1.26s   min=691.43ms med=1.26s   max=3.31s p(90)=1.65s   p(95)=1.71s
-    iterations.....................: 28651 157.613005/s
-    vus............................: 46    min=46         max=200
-    vus_max........................: 200   min=200        max=200
-    NETWORK
-    data_received..................: 42 MB 233 kB/s
-    data_sent......................: 11 MB 58 kB/s
-```
-
-### Bài C: 3 phút, API mới 32 endpoint, thêm đọc vị trí/ứng viên/thống kê và ghi ứng viên mới (`WITH_DOMAIN=1`)
-
-> **Mục đích:** Kiểm tra **API thật 32 endpoint** với truy vấn đọc và ghi vào các bảng tuyển dụng, không chỉ endpoint demo.
->
-> **Cách test:** Như bài A (3 phút), mỗi vòng thêm: đọc danh sách vị trí, danh sách ứng viên, thống kê; cứ 10 vòng tạo thêm một ứng viên mới. Trước khi chạy, tạo dữ liệu mẫu bằng `POST /seed`.
->
-> **Kết quả cho thấy:** Không lỗi, p95 120 ms. Tuy nhiên CPU của database lên tới **92,6%** ở mức dung lượng tối đa, nên đây là **bài sát giới hạn nhất** của cấu hình hiện tại.
->
-> **Kết quả KHÔNG chứng minh:** Không cho thấy hệ thống còn chịu được bao nhiêu nữa; ngược lại, nó báo trước database là điểm nghẽn tiếp theo.
-
-Lệnh (chạy lúc 2026-10-26 14:41):
-
-```bash
-docker run --rm -v "$PWD/scripts:/s:ro" grafana/k6 run -e BASE_URL=http://$ALB -e VUS=200 -e DURATION=3m -e WITH_DOMAIN=1 /s/loadtest.js
-```
-
-| Đối tượng | Trung vị (ms) | p90 (ms) | p95 (ms) | Lớn nhất (ms) |
-|---|---|---|---|---|
-| Tất cả request | 71,7 | 82,0 | 119,9 | 2270 |
-| Trang frontend | 68,9 | 77,2 | 81,0 | 1080 |
-| API (qua proxy của frontend) | 70,9 | 76,9 | 79,8 | 1030 |
-
-Phần tổng kết gốc của k6 (nguyên văn):
-
-```
-# THRESHOLDS
-    http_req_duration{kind:light}
-    [đạt] 'p(95)<500' p(95)=119.93ms
-    [đạt] 'p(99)<3000' p(99)=306.26ms
-    http_req_duration{target:api}
-    [đạt] 'p(95)<500' p(95)=79.76ms
-    http_req_duration{target:frontend}
-    [đạt] 'p(95)<500' p(95)=81.05ms
-    http_req_failed
-    [đạt] 'rate<0.01' rate=0.00%
-  # TOTAL RESULTS
-    checks_total.......: 131694  714.352208/s
-    checks_succeeded...: 100.00% 131694 out of 131694
-    checks_failed......: 0.00%   0 out of 131694
-    [đạt] seed 201
-    [đạt] frontend 200
-    [đạt] api / 200
-    [đạt] positions 200
-    [đạt] applicants 200
-    [đạt] stats 200
-    [đạt] create applicant 201
-    HTTP
-    http_req_duration..............: avg=78.19ms min=60.3ms   med=71.69ms max=2.27s p(90)=82.01ms p(95)=119.93ms
-      { expected_response:true }...: avg=78.19ms min=60.3ms   med=71.69ms max=2.27s p(90)=82.01ms p(95)=119.93ms
-      { kind:light }...............: avg=78.17ms min=60.3ms   med=71.69ms max=1.09s p(90)=82ms    p(95)=119.93ms
-      { target:api }...............: avg=75.49ms min=61.72ms  med=70.9ms  max=1.03s p(90)=76.89ms p(95)=79.76ms
-      { target:frontend }..........: avg=73.17ms min=60.3ms   med=68.9ms  max=1.08s p(90)=77.19ms p(95)=81.05ms
-    http_req_failed................: 0.00%  0 out of 131694
-    http_reqs......................: 131694 714.352208/s
-    EXECUTION
-    iteration_duration.............: avg=1.4s    min=823.46ms med=1.4s    max=3s    p(90)=1.79s   p(95)=1.85s
-    iterations.....................: 25804  139.969508/s
-    vus............................: 9      min=0           max=200
-    vus_max........................: 200    min=200         max=200
-    NETWORK
-    data_received..................: 166 MB 901 kB/s
-    data_sent......................: 18 MB  96 kB/s
-```
-
-### Bài D: 2 phút, 200 user có gọi một endpoint chậm (`WITH_SLOW=1`), API đã chạy sẵn 1 pod
-
-> **Mục đích:** Cho thấy API lên 2 pod vì **tải ổn định**, không phải vì đợt request dồn lúc cold start. Muốn bộ co giãn HTTP thêm pod thì số request đang chờ cùng lúc phải vượt 100 mỗi pod. Request nhanh không bao giờ đạt mức đó với 200 user (khoảng 10 request đồng thời), nên bài này dùng endpoint thử nghiệm `GET /slow?ms=2000` (chỉ chờ 2 giây, không tốn CPU).
->
-> **Cách test:** API đã được gọi trước để có 1 pod chạy sẵn. k6 chạy 200 user trong 2 phút; mỗi lượt gọi trang frontend, `GET /api/`, và `GET /api/slow?ms=2000`. Ghi số pod API mỗi ~9 giây.
->
-> **Kết quả cho thấy:** API đi từ **1 lên 2 pod sau khoảng 15 giây** và giữ 2 pod đến hết bài, rồi về 0 sau khi hết tải (đã hạ thời gian chờ về 0 xuống 10 giây để demo). 0 lỗi trong 22.509 request; p95 của các request nhanh là 77,9 ms, p99 302,7 ms. Các request `/slow` mất khoảng 2 giây như thiết kế (p95 toàn bộ 2,07 giây là do chúng).
->
-> **Kết quả KHÔNG chứng minh:** Đây là tải tổng hợp, không phải người dùng thật. Chỉ một lần chạy. Endpoint `/slow` là công cụ thử nghiệm thêm vào API cho mục đích này.
-
-Lệnh:
-
-```bash
-docker run --rm -v "$PWD/scripts:/s:ro" grafana/k6 run -e BASE_URL=http://$ALB -e VUS=200 -e DURATION=2m -e WITH_SLOW=1 -e SLOW_MS=2000 /s/loadtest.js
-```
-
-Dữ liệu thô: `docs/results/load-200vus-2m-slow-api-k6.txt` (báo cáo k6) và `docs/results/load-200vus-2m-slow-api-timeline.csv` (số pod theo thời gian).
-
-### Hệ thống phản ứng thế nào trong bài A (mỗi ~17 giây một mẫu)
-
-| Giờ | Pod FE | Pod API | Số node | CPU FE (m, tổng) | CPU API (m, tổng) |
-|---|---|---|---|---|---|
-| 13:07:16 | 1 | 2 | 4 | 1 | 0 |
-| 13:07:33 | 1 | 2 | 4 | 52 | 46 |
-| 13:07:50 | 1 | 2 | 4 | 50 | 43 |
-| 13:08:08 | 1 | 2 | 4 | 53 | 44 |
-| 13:08:24 | 1 | 2 | 4 | 56 | 44 |
-| 13:08:41 | 2 | 2 | 4 | 51 | 43 |
-| 13:08:58 | 2 | 2 | 4 | 65 | 42 |
-| 13:09:16 | 2 | 2 | 4 | 61 | 40 |
-| 13:09:34 | 2 | 2 | 4 | 62 | 42 |
-| 13:09:50 | 2 | 2 | 4 | 61 | 40 |
-| 13:10:07 | 2 | 2 | 4 | 60 | 41 |
-| 13:10:26 | 2 | 2 | 4 | 60 | 41 |
-| 13:10:44 | 2 | 2 | 4 | 61 | 40 |
-| 13:11:01 | 2 | 2 | 4 | 62 | 40 |
-| 13:11:17 | 2 | 2 | 4 | 60 | 42 |
-| 13:11:34 | 2 | 2 | 4 | 60 | 41 |
-| 13:11:53 | 2 | 2 | 4 | 59 | 41 |
-| 13:12:11 | 2 | 2 | 4 | 60 | 24 |
-| 13:12:30 | 2 | 1 | 4 | 46 | 24 |
-
-- Số pod **không vượt 2** ở cả FE lẫn API (giới hạn đã đặt), số node giữ nguyên 4: không cần tạo thêm node nhờ chỗ trống (headroom) đã giữ sẵn.
-- API có 2 pod ngay từ đầu bài, **nhưng không phải vì tải ổn định**. Bộ co giãn KEDA HTTP tính theo số request **đang chờ cùng lúc** (mục tiêu 100 mỗi pod), mà 200 người dùng nghỉ khoảng 1 giây giữa các lần gọi và API trả lời trong vài chục mili giây thì chỉ có khoảng 10 request đồng thời. Số pod là 2 vì API bắt đầu từ 0 pod: 200 request đến cùng lúc, interceptor giữ hết chúng chờ pod đầu tiên khởi động (khi đó số request chờ là 200), và cửa sổ ổn định khi giảm của bộ co giãn (mặc định 300 giây) giữ nguyên 2 pod đến hết bài 5 phút. Vì vậy ba bài trên **không chứng minh** rằng tải 200 user ổn định đòi 2 pod API. Bài D bên dưới đo trường hợp đó.
-- FE tăng từ 1 lên 2 pod nhờ HPA sau khoảng 90 giây.
-
-### Aurora trong lúc có tải (CloudWatch, giá trị lớn nhất mỗi phút)
-
-Nhãn giờ ở đầu mỗi cột là **giờ máy (UTC+7)**; cửa sổ truy vấn ghi theo UTC. Mỗi bài chỉ lấy các phút nằm trong cửa sổ chạy tải.
-
-**Bài B (có `/db`)**, cửa sổ UTC 2026-10-26T06:57:43Z đến 2026-10-26T07:00:45Z:
-
-```
-ServerlessDatabaseCapacity: 13:57=2.00  13:58=1.50  13:59=1.50
-DatabaseConnections: 13:57=2.00  13:58=10.00  13:59=10.00
-CPUUtilization: 13:57=69.47  13:58=56.47  13:59=60.78
-```
-
-**Bài C (endpoint domain)**, cửa sổ UTC 2026-10-26T07:41:18Z đến 2026-10-26T07:44:23Z:
-
-```
-ServerlessDatabaseCapacity: 14:41=2.00  14:42=2.00  14:43=1.50
-DatabaseConnections: 14:41=10.00  14:42=10.00  14:43=10.00
-CPUUtilization: 14:41=92.61  14:42=74.07  14:43=67.89
-```
-
-- Bài B (có `/db`): đỉnh dung lượng **2,00 ACU** (mức tối đa đã đặt là 2,0), tối đa **10 kết nối**, CPU của database lên tới **69,5%**.
-- Bài C (endpoint domain): đỉnh dung lượng **2,00 ACU** (mức tối đa đã đặt là 2,0), tối đa **10 kết nối**, CPU của database lên tới **92,6%**.
-- Nghĩa là: dung lượng tăng từ mức tối thiểu 0,5 ACU lên mức tối đa khi có 200 user, và CPU của database rất cao (bài C gần chạm giới hạn). Database **chịu được 200 user nhưng không còn dư địa**; tải cao hơn cần tăng `db_max_acu`, và tôi chưa thử.
-
-### Bài E: 200 user có gọi database, kèm ACU của Aurora (`WITH_DB=1 WITH_DOMAIN=1 WITH_SLOW=1`, 2 phút)
-
-> **Mục đích:** Cho thấy Aurora co giãn ACU trong khoảng 0,5 đến 2,0 khi có tải thật chạm database, và API/frontend không vượt 2 pod.
-> **Cách test:** `docker run grafana/k6 run -e VUS=200 -e DURATION=2m -e WITH_SLOW=1 -e WITH_DB=1 -e WITH_DOMAIN=1 scripts/loadtest.js`, rồi đọc `ServerlessDatabaseCapacity`, `CPUUtilization`, `DatabaseConnections` của `demo-aurora` từ CloudWatch (giá trị lớn nhất mỗi phút). Số pod lấy mẫu mỗi 5 giây.
-> **Kết quả KHÔNG chứng minh:** CloudWatch chỉ có độ phân giải 1 phút nên không thấy đỉnh ngắn hơn; chỉ chạy một lần, 2 phút.
-
-**Lượt chạy trước, không đạt mục đích:** lần đầu tôi chạy `WITH_SLOW=1` mà **không** bật `WITH_DB`/`WITH_DOMAIN`. ACU giữ 0,5 và số kết nối là 0 suốt bài, tức tải không hề chạm database (`docs/evidence/aurora-acu-no-db/`). Giữ lại để thấy ACU chỉ tăng khi database thực sự được dùng.
-
-| Chỉ số | Kết quả |
+| Chỉ số | Giá trị |
 |---|---|
-| Request | 47.379, **0 lỗi**, 100% kiểm tra đạt |
-| Thời gian trả lời | trung vị 73 ms; p95 2,07 s toàn bộ (do endpoint `/slow` cố tình chờ 2 giây); p95 của request nhẹ 304 ms |
-| API | 1 → **2 pod** sau khoảng 15 giây, không vượt 2 |
-| Frontend | 1 → **2 pod** sau khoảng 30 giây, không vượt 2 |
+| Khoảng frontend lỗi, số request không phải 200 | chưa đo |
+| Thời gian đến khi frontend trả lại 200 | chưa đo |
+| Thời gian đến khi đủ node và pod giữ chỗ | chưa đo |
+| Pod nào nằm trên node bị tắt | chưa ghi |
 
-| Phút (giờ VN) | ACU | CPU database | Kết nối |
-|---|---|---|---|
-| 14:16 | 0,5 | 27,6% | 0 |
-| 14:17 | **2,0** | 83,5% | 2 |
-| 14:18 | 1,5 | 66,6% | 20 |
-| 14:19 | 1,5 | 62,7% | 20 |
-| 14:20 | 2,0 | 27,3% | 0 |
+## 10. Chart Helm với image bất kỳ
 
-**Kết luận:** ACU đi từ **0,5 lên 2,0** (chạm trần đã đặt) ngay phút đầu có tải, đúng giới hạn 0,5 đến 2,0. Frontend lên 2 pod trong bài này là bằng chứng frontend thật (không phải bản sao) chạm ngưỡng HPA và dừng ở tối đa 2. **Lưu ý trung thực:** không chụp CPU của HPA frontend lúc đó, nên nguyên nhân tăng pod frontend được suy ra từ cấu hình HPA, không đo trực tiếp. Dòng 14:20 ACU 2,0 là điểm của phút sau khi tải kết thúc (ACU hạ chậm hơn tải).
-Dữ liệu: `docs/evidence/aurora-acu/` (`k6.txt`, `acu.txt`, `pods.csv`, `k6_start.txt`, `k6_end.txt`).
-
-## 5. Bằng chứng khả năng scale: HPA, Karpenter, KEDA với SQS
-
-Dữ liệu thô: `docs/evidence/scaling/` (bài frontend HPA, Karpenter, KEDA với SQS: chuỗi thời gian, sự kiện, nhật ký Karpenter, bộ đếm SQS) và `docs/evidence/hpa-demo/` (bài HPA tốn CPU).
-
-> **Mục đích:** Chứng minh bằng số đo và nhật ký của chính cluster rằng ba tầng co giãn đều **hoạt động thật**: HPA thêm/bớt **pod** theo CPU, Karpenter thêm/bớt **node** theo pod không có chỗ chạy, KEDA bật/tắt **worker** theo độ dài hàng đợi SQS.
->
-> **Cách test:** Cho mỗi tầng: tạo đúng điều kiện kích hoạt, rồi ghi lại trạng thái cluster **mỗi khoảng 8 giây** (số pod, đầu ra của HPA, số node, độ dài hàng đợi) kèm **sự kiện Kubernetes** và **nhật ký của Karpenter** sinh ra trong lúc đó. Sự kiện và nhật ký do các thành phần tự ghi, nên là bằng chứng độc lập với script đo.
->
-> **Kết quả cho thấy:** Mỗi tiểu mục dưới đây có (1) bảng thay đổi theo thời gian, (2) các sự kiện/nhật ký tương ứng, (3) kết luận cho tầng đó. Một tầng được coi là chứng minh khi **cả hai chiều** (tăng khi có tải, giảm về mức tối thiểu khi hết tải) đều xuất hiện.
->
-> **Kết quả KHÔNG chứng minh:** Không chứng minh ngưỡng cụ thể ở mọi mức tải; mỗi bài chỉ là một lần chạy.
-
-### 5.1 HPA: tầng pod
-
-> **Mục đích:** Chứng minh HPA **tăng số pod khi CPU vượt mục tiêu (50% so với mức pod xin)** và **giảm khi hết tải**. Với frontend, HPA có giới hạn 1 đến 2 pod.
->
-> **Cách test:** Bài 1 (frontend thật): k6 200 user trong 4 phút vào trang frontend và `/api/`, rồi chờ HPA tự giảm (cửa sổ giảm 5 phút). Bài 2 (workload tốn CPU có chủ đích): xem 5.1b nếu có.
->
-> **Kết quả cho thấy:** Xem kết luận ngay dưới bảng.
->
-> **Kết quả KHÔNG chứng minh:** Một lần chạy không chứng minh HPA tính đúng ở mọi mức CPU.
-
-Lệnh:
-
-```bash
-docker run --rm -v "$PWD/scripts:/s:ro" grafana/k6 run -e BASE_URL=http://$ALB -e VUS=200 -e DURATION=4m /s/loadtest.js
-kubectl -n demo get hpa fe -w          # xem HPA phản ứng
-```
-
-**Bài 1: frontend dưới 200 user (các thời điểm có thay đổi)**
-
-| Giờ | Pod frontend | HPA đang đặt | CPU so với mức pod xin (%) | Ghi chú |
-|---|---|---|---|---|
-| 14:55:49 | 1 | 1 | 1 | bắt đầu tải |
-| 14:56:37 | 1 | 1 | 46 |  |
-| 14:57:25 | 1 | 1 | 46 |  |
-| 14:58:13 | 1 | 1 | 45 |  |
-| 14:59:01 | 1 | 1 | 45 |  |
-| 14:59:49 | 1 | 1 | 47 | kết thúc tải |
-
-**Kết luận (lần chạy này):** CPU của frontend chỉ đạt đỉnh **47%**, thấp hơn mục tiêu 50%, nên HPA **đúng** là không thêm pod (số pod luôn 1). Lần chạy này **không** là bằng chứng scale-out; nó chỉ cho thấy HPA không scale khi chưa vượt ngưỡng. Ở bài A (mục 4) cùng tải này đã làm CPU nhỉnh qua 50% và frontend lên 2 pod, nên frontend nằm sát ngưỡng và không phải bằng chứng ổn định. Bằng chứng chắc chắn hơn nằm ở 5.1b (workload tốn CPU rõ rệt).
-
-Sự kiện co giãn (`SuccessfulRescale`) của HPA frontend trong bài này: **không có**, HPA không đổi số pod lần nào.
-
-Đầu ra `kubectl -n demo get hpa` ngay sau tải:
-
-```
-$ kubectl -n demo get hpa
-NAME              REFERENCE           TARGETS             MINPODS   MAXPODS   REPLICAS   AGE
-fe                Deployment/fe       cpu: 47%/50%        1         2         1          3h42m
-keda-hpa-api      Deployment/api      0/100 (avg)         1         2         1          3h42m
-keda-hpa-worker   Deployment/worker   <unknown>/5 (avg)   1         20        0          74m
-```
-
-#### 5.1b HPA với workload tốn CPU có chủ đích
-
-> **Mục đích:** Frontend nginx dùng rất ít CPU nên nằm sát ngưỡng và không cho bằng chứng ổn định. Cần một workload **chắc chắn vượt 50% CPU** để quan sát HPA tăng rồi giảm.
->
-> **Cách test:** Triển khai một bản sao của API bằng đúng chart `app` ở chế độ HPA (tối thiểu 1, tối đa 3 pod, mục tiêu CPU 50%, pod xin 250m CPU, cửa sổ giảm 60 giây). Từ **bên trong cluster**, vài vòng lặp gọi `GET /burn?ms=4000` (endpoint đốt CPU) tạo tải CPU lớn; sau đó dừng tải và chờ HPA giảm. Ghi trạng thái mỗi ~6 giây.
->
-> **Kết quả cho thấy:** Xem bảng dưới: số pod tăng khi CPU vượt mục tiêu và giảm về 1 khi hết tải.
->
-> **Kết quả KHÔNG chứng minh:** Đây là workload thử nghiệm, không phải frontend hay API thật; cửa sổ giảm 60 giây ngắn hơn giá trị thật (300 giây) để bài chạy gọn.
-
-Ghi chú: cột "Pod đang chạy" đếm cả pod tạo tải (`load`) và pod đang tắt dần; số pod của HPA là cột "HPA hiện có". Hai sự kiện `Failed...` đầu tiên là HPA chưa kịp có số đo CPU của pod mới tạo, không phải lỗi co giãn.
-
-| Giờ | Pod đang chạy | HPA hiện có | HPA đang đặt | CPU so với mức pod xin (%) | Số node default |
-|---|---|---|---|---|---|
-| 15:12:12 | 1 |  | 0 | - | 2 |
-| 15:12:29 | 1 | 1 | 0 | - | 2 |
-| 15:12:46 | 2 | 1 | 1 | 0 | 2 |
-| 15:12:54 | 2 | 1 | 1 | 0 | 2 |
-| 15:13:27 | 3 | 1 | 2 | 779 | 2 |
-| 15:13:36 | 3 | 1 | 2 | 779 | 2 |
-| 15:13:44 | 4 | 2 | 3 | 780 | 2 |
-| 15:14:01 | 4 | 3 | 3 | 642 | 2 |
-| 15:14:18 | 4 | 3 | 3 | 455 | 2 |
-| 15:15:00 | 4 | 3 | 3 | 489 | 2 |
-| 15:15:42 | 3 | 3 | 3 | 392 | 2 |
-| 15:16:24 | 3 | 3 | 3 | 87 | 2 |
-| 15:17:06 | 3 | 3 | 3 | 0 | 3 |
-| 15:17:47 | 3 | 3 | 3 | 0 | 3 |
-| 15:17:55 | 1 | 3 | 1 | 0 | 3 |
-| 15:18:12 | 1 | 1 | 1 | 0 | 3 |
-| 15:18:20 | 1 | 1 | 1 | 0 | 3 |
-
-- 15:12:22 `FailedComputeMetricsReplicas`: invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
-- 15:12:22 `FailedGetResourceMetric`: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
-- 15:13:22 `SuccessfulRescale`: New size: 2; reason: cpu resource utilization (percentage of request) above target
-- 15:13:37 `SuccessfulRescale`: New size: 3; reason: cpu resource utilization (percentage of request) above target
-- 15:17:53 `SuccessfulRescale`: New size: 1; reason: All metrics below target
-
-**Kết luận:** HPA tăng từ 1 lên **3 pod** (mức tối đa đã đặt) khi CPU vượt xa 50%, mỗi bước đều có sự kiện `SuccessfulRescale` ghi nguyên nhân, rồi sau khi hết tải và hết cửa sổ ổn định 60 giây thì đưa về **1 pod**. Cả scale-out và scale-in đều có bằng chứng.
-
-#### 5.1c HPA với tải nhẹ, dừng ở 3 pod mà không chạm trần
-
-> **Mục đích:** Ở 5.1b tải quá nặng (4 vòng lặp đốt CPU liên tục, CPU lên 780%) nên HPA muốn tới khoảng 30 pod và bị chặn ở trần 3; số pod 3 lúc đó là trần, không phải mức cân bằng. Bài này giảm tải để cho thấy HPA **tự cân bằng** ở 3 pod.
->
-> **Cách test:** Cùng bản sao API, cùng cấu hình (1 đến 3 pod, mục tiêu CPU 50%, pod xin 250m, cửa sổ giảm 60 giây). Tải: một vòng lặp gọi `GET /burn?ms=1000` rồi nghỉ 2 giây, trong 150 giây (khoảng 330m CPU tổng). Ghi trạng thái mỗi ~5 giây.
->
-> **Kết quả cho thấy:** HPA đi **1 → 2 → 3 pod** trong khoảng 30 giây (sự kiện `SuccessfulRescale` lúc 04:23:54 và 04:24:09 UTC, lý do "cpu resource utilization above target"). CPU đo được là 130 đến 136% khi còn 1 đến 2 pod, rồi **rơi về khoảng 29 đến 51%** khi đủ 3 pod (quanh mục tiêu 50%) và số pod **giữ nguyên 3** thay vì leo thêm. Sau khi hết tải, HPA giảm về **1 pod** (sự kiện "All metrics below target" lúc 04:27:09 UTC).
->
-> **Kết quả KHÔNG chứng minh:** Chỉ một lần chạy. Một số mẫu CPU bằng 0 là chỗ metrics-server chưa kịp có số đo, không phải CPU thật bằng 0. Cửa sổ giảm 60 giây ngắn hơn giá trị thật (300 giây).
-
-Dữ liệu thô: `docs/evidence/hpa-light/` (`timeline.csv`, `markers.csv`, `events.json`).
-
-### 5.2 Karpenter: tầng node
-
-> **Mục đích:** Chứng minh Karpenter **tạo node mới khi có pod không còn chỗ chạy** và **dọn node thừa khi không còn cần**, bằng node spot đúng loại.
->
-> **Cách test:** Tạo một Deployment gồm 3 pod, mỗi pod xin 1200m CPU (tổng 3600m, lớn hơn chỗ trống trên các node hiện có), chỉ định chạy trên pool `default`. Chờ cả 3 pod sẵn sàng. Sau đó xoá Deployment và chờ Karpenter thu hồi node. Ghi số node, `NodeClaim`, và nhật ký của Karpenter.
->
-> **Kết quả cho thấy:** Nhật ký Karpenter bên dưới là chuỗi sự kiện do Karpenter tự ghi: thấy pod chưa xếp được, tính node cần, tạo `NodeClaim`, node đăng ký và sẵn sàng, rồi khi hết cần thì gom và xoá node.
->
-> **Kết quả KHÔNG chứng minh:** Không chứng minh Karpenter xử lý đúng khi spot hết hàng hoặc bị thu hồi.
-
-Lệnh:
-
-```bash
-kubectl create namespace tier-test
-# Deployment 'karpenter-probe': 3 replicas, nodeSelector nodepool=default, cpu request 1200m, image registry.k8s.io/pause:3.10
-kubectl get nodeclaim -w
-kubectl delete namespace tier-test       # rồi chờ node biến mất
-```
-
-| Giờ | Số node pool default | Số NodeClaim | Ghi chú |
-|---|---|---|---|
-| 15:00:21 | 2 | 4 | tạo 3 pod xin 3600m CPU |
-| 15:00:37 | 3 | 4 |  |
-| 15:00:45 | 4 | 4 |  |
-| 15:03:01 | 3 | 3 |  |
-| 15:04:13 | 2 | 2 |  |
-
-- Từ lúc tạo pod đến khi cả 3 pod sẵn sàng: **44 giây** (gồm Karpenter tạo node spot mới).
-- Từ lúc xoá bài thử đến khi số node về mức ban đầu: **191 giây** (gồm thời gian chờ gom node).
-
-**Pod của bài thử và node chúng chạy (`kubectl get pods -o wide`):**
-
-```
-$ kubectl -n tier-test get pods -o wide
-NAME                               READY   STATUS    RESTARTS   AGE   IP            NODE                                             NOMINATED NODE   READINESS GATES
-karpenter-probe-6474d9dfdf-bj7sr   1/1     Running   0          43s   10.0.5.139    ip-10-0-7-166.ap-southeast-1.compute.internal    <none>           <none>
-karpenter-probe-6474d9dfdf-r42sv   1/1     Running   0          43s   10.0.6.155    ip-10-0-3-182.ap-southeast-1.compute.internal    <none>           <none>
-karpenter-probe-6474d9dfdf-wxfnz   1/1     Running   0          43s   10.0.39.112   ip-10-0-46-236.ap-southeast-1.compute.internal   <none>           <none>
-```
-
-**Các NodeClaim lúc đó (`kubectl get nodeclaim -o wide`):**
-
-```
-$ kubectl get nodeclaim -o wide
-NAME            TYPE        CAPACITY   ZONE              NODE                                             READY   AGE     IMAGEID                 ID                                           NODEPOOL   NODECLASS   DRIFTED
-default-6cwjh   t3.medium   spot       ap-southeast-1c   ip-10-0-46-236.ap-southeast-1.compute.internal   True    3h52m   ami-0b1988268abc044b3   aws:///ap-southeast-1c/i-0413228afd3d7d2b0   default    default     
-default-fjpzt   c7g.large   spot       ap-southeast-1a   ip-10-0-7-166.ap-southeast-1.compute.internal    True    55m     ami-0cfb5d0ee50ea6e01   aws:///ap-southeast-1a/i-09d9899e26d31efe6   default    default     
-default-t484t   t3.medium   spot       ap-southeast-1a   ip-10-0-3-182.ap-southeast-1.compute.internal    True    43s     ami-0b1988268abc044b3   aws:///ap-southeast-1a/i-027015b754e78a226   default    default     
-default-t9f2c   t4g.large   spot       ap-southeast-1c   ip-10-0-35-242.ap-southeast-1.compute.internal   True    43s     ami-0cfb5d0ee50ea6e01   aws:///ap-southeast-1c/i-072ec2622d52c7aaa   default    default
-```
-
-**Nhật ký của Karpenter trong bài này (lọc các sự kiện chính; giờ máy):**
-
-| Giờ | Sự kiện | Chi tiết |
-|---|---|---|
-| 15:00:20 | computed new nodeclaim(s) to fit pod(s) |  |
-| 15:00:20 | found provisionable pod(s) |  |
-| 15:00:20 | created nodeclaim | NodeClaim=default-t9f2c |
-| 15:00:20 | created nodeclaim | NodeClaim=default-t484t |
-| 15:00:23 | launched nodeclaim | NodeClaim=default-t9f2c, instance-type=t4g.large, capacity-type=spot, zone=ap-southeast-1c |
-| 15:00:24 | launched nodeclaim | NodeClaim=default-t484t, instance-type=t3.medium, capacity-type=spot, zone=ap-southeast-1a |
-| 15:00:41 | registered nodeclaim | NodeClaim=default-t484t |
-| 15:00:44 | registered nodeclaim | NodeClaim=default-t9f2c |
-| 15:00:55 | initialized nodeclaim | NodeClaim=default-t484t |
-| 15:00:56 | initialized nodeclaim | NodeClaim=default-t9f2c |
-| 15:02:31 | disrupting node(s) |  |
-| 15:02:31 | tainted node | NodeClaim=default-fjpzt |
-| 15:03:03 | deleted node | NodeClaim=default-fjpzt |
-| 15:03:03 | deleted nodeclaim | NodeClaim=default-fjpzt |
-| 15:03:47 | tainted node | NodeClaim=default-6cwjh |
-| 15:04:14 | deleted node | NodeClaim=default-6cwjh |
-| 15:04:14 | deleted nodeclaim | NodeClaim=default-6cwjh |
-| 15:05:01 | created nodeclaim | NodeClaim=worker-s6h2l |
-| 15:05:06 | launched nodeclaim | NodeClaim=worker-s6h2l, instance-type=t3.medium, capacity-type=spot, zone=ap-southeast-1b |
-| 15:05:14 | created nodeclaim | NodeClaim=worker-4mx4s |
-| 15:05:14 | created nodeclaim | NodeClaim=worker-xqrrq |
-
-**Kết luận:** số node pool `default` tăng từ 2 lên 4 ngay sau khi 3 pod không còn chỗ chạy, cả 3 pod sẵn sàng sau 44 giây, rồi sau khi xoá pod, Karpenter tự gom và xoá node thừa, đưa về 2 node sau 191 giây. Cả hai chiều đều có bằng chứng, kèm nhật ký do chính Karpenter ghi. Các NodeClaim đều là `spot`, gồm cả amd64 (t3) và arm64 (t4g, c7g).
-
-### 5.3 KEDA với SQS: tầng worker
-
-> **Mục đích:** Chứng minh KEDA **bật worker khi hàng đợi có message** (từ 0 pod), **tăng số worker theo độ dài hàng đợi**, **xử lý hết message không mất cái nào**, rồi **đưa worker về 0** khi hàng đợi rỗng.
->
-> **Cách test:** Gửi 500 message vào SQS qua `POST /jobs` (5 lần × 100). KEDA đọc độ dài hàng đợi để quyết định số worker (mục tiêu 5 message mỗi worker, tối đa 20). Ghi độ dài hàng đợi, số worker và số node worker; sau đó đối chiếu **bộ đếm của chính SQS** (gửi, nhận, xoá) và hàng đợi lỗi (DLQ).
->
-> **Kết quả cho thấy:** Số message gửi, nhận và xoá bằng nhau và DLQ bằng 0 nghĩa là mọi message đều được worker xử lý thành công. Chuỗi 0 → N → 0 pod của worker là bằng chứng KEDA scale theo hàng đợi cả hai chiều.
->
-> **Kết quả KHÔNG chứng minh:** Worker chỉ giả lập công việc (ngủ 2 giây mỗi message); không chứng minh khối lượng xử lý nặng thật.
-
-Lệnh:
-
-```bash
-Q=$(terraform -chdir=terraform output -raw queue_url)
-for i in 1 2 3 4 5; do curl -s -XPOST -H "Host: api.demo.local" http://$ALB/jobs -d '{"count":100}'; echo; done
-watch -n 5 "aws sqs get-queue-attributes --queue-url $Q --region ap-southeast-1 --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible --query Attributes --output text"
-kubectl -n demo get pods -l app.kubernetes.io/name=worker -w ; kubectl -n demo get hpa keda-hpa-worker
-```
-
-| Giờ | Message chờ | Đang xử lý | Worker (đang chạy / tổng) | HPA của KEDA đặt | Node worker | DLQ |
-|---|---|---|---|---|---|---|
-| 15:04:37 | 0 | 0 | 0 / 0 | 0 | 0 | 0 |
-| 15:05:01 | 500 | 0 | 0 / 1 | 0 | 0 | 0 |
-| 15:05:17 | 500 | 0 | 0 / 4 | 4 | 0 | 0 |
-| 15:05:25 | 500 | 0 | 0 / 4 | 4 | 1 | 0 |
-| 15:05:33 | 500 | 0 | 0 / 8 | 8 | 3 | 0 |
-| 15:05:41 | 500 | 0 | 5 / 8 | 16 | 3 | 0 |
-| 15:05:49 | 500 | 0 | 11 / 16 | 16 | 3 | 0 |
-| 15:05:57 | 0 | 0 | 11 / 20 | 20 | 3 | 0 |
-| 15:06:05 | 0 | 0 | 19 / 20 | 20 | 3 | 0 |
-| 15:06:21 | 0 | 0 | 20 / 20 | 20 | 3 | 0 |
-| 15:07:01 | 0 | 0 | 0 / 3 | 20 | 3 | 0 |
-| 15:07:09 | 0 | 0 | 0 / 0 | 20 | 3 | 0 |
-| 15:07:17 | 0 | 0 | 0 / 0 | 0 | 3 | 0 |
-| 15:07:33 | 0 | 0 | 0 / 0 | 0 | 3 | 0 |
-
-Mốc thời gian kể từ lúc gửi message (độ phân giải khoảng 8 đến 14 giây):
-
-- worker pod đầu tiên được tạo (KEDA kích hoạt): **+25 giây**
-- node worker đầu tiên có mặt (Karpenter): **+49 giây**
-- worker đầu tiên chạy: **+65 giây**
-- hàng đợi hết message: **+81 giây**
-- worker về 0 pod: **+153 giây**
-- Đỉnh: **20 pod worker**, **3 node worker**, DLQ lớn nhất **0**.
-
-**Sự kiện co giãn do KEDA/HPA ghi cho worker (giờ máy):**
-
-| Giờ | Đối tượng | Lý do | Nội dung |
-|---|---|---|---|
-| 15:05:00 | ScaledObject/worker | KEDAScaleTargetActivated | Scaled apps/v1.Deployment demo/worker from 0 to 1, triggered by s0-aws-sqs-demo-jobs |
-| 15:05:13 | HorizontalPodAutoscaler/keda-hpa-worker | SuccessfulRescale | New size: 4; reason: external metric s0-aws-sqs-demo-jobs(&LabelSelector{MatchLabels:map[string]string{scaledobject.keda.sh/name: worker,},M |
-| 15:05:28 | HorizontalPodAutoscaler/keda-hpa-worker | SuccessfulRescale | New size: 8; reason: external metric s0-aws-sqs-demo-jobs(&LabelSelector{MatchLabels:map[string]string{scaledobject.keda.sh/name: worker,},M |
-| 15:05:43 | HorizontalPodAutoscaler/keda-hpa-worker | SuccessfulRescale | New size: 16; reason: external metric s0-aws-sqs-demo-jobs(&LabelSelector{MatchLabels:map[string]string{scaledobject.keda.sh/name: worker,}, |
-| 15:05:58 | HorizontalPodAutoscaler/keda-hpa-worker | SuccessfulRescale | New size: 20; reason: All metrics below target |
-| 15:07:00 | ScaledObject/worker | KEDAScaleTargetDeactivated | Deactivated apps/v1.Deployment demo/worker from 20 to 0 |
-
-**Bộ đếm của chính SQS (CloudWatch, cộng cả cửa sổ 40 phút của bài chạy; gồm 500 message của bài này, có thể cộng thêm vài message của các lần thử khác trong cùng cửa sổ):**
-
-```
-NumberOfMessagesSent 504.0
-NumberOfMessagesReceived 504.0
-NumberOfMessagesDeleted 504.0
-DLQ_MessagesSent 0.0
-```
-
-Trạng thái ScaledObject của worker **trước** khi gửi message:
-
-```
-$ kubectl -n demo get scaledobject worker
-NAME     SCALETARGETKIND      SCALETARGETNAME   MIN   MAX   READY   ACTIVE   FALLBACK   PAUSED   TRIGGERS        AUTHENTICATIONS   AGE
-worker   apps/v1.Deployment   worker            0     20    True    False    False      False    aws-sqs-queue   worker-aws        79m
-```
-
-**Kết luận:** worker đi từ **0 pod** lên **20 pod** (tối đa đã đặt) khi có 500 message, mỗi bước tăng đều có sự kiện `SuccessfulRescale` của KEDA, Karpenter tạo thêm node worker để chứa chúng, SQS ghi nhận số message gửi = nhận = xoá và DLQ = 0 (không mất, không lỗi), rồi khi hàng đợi rỗng KEDA đưa worker **về 0**. **Lưu ý trung thực:** mẫu lấy mỗi ~8 giây nên cột "Đang xử lý" có thể bỏ sót khoảng thời gian ngắn; bộ đếm CloudWatch là con số đáng tin hơn. Các node worker không bị xoá ngay lúc worker về 0 vì Karpenter còn chờ gom (consolidateAfter) và có thể giữ làm chỗ trống cho pod khác.
-
-### 5.4 Mất một node spot đột ngột
-
-> **Mục đích:** Chứng minh khi AWS lấy lại đột ngột một node spot đang chạy pod frontend, cụm tự hồi phục và đo người dùng thấy gián đoạn bao lâu.
-> **Cách test:** `scripts/spot-loss-test.sh`. Chọn node đang chạy pod frontend, gửi request mỗi 0,5 giây qua ALB (một vòng vào frontend `/`, một vòng vào API `/healthz`), sau đó chạy `aws ec2 terminate-instances` lên instance đó, ghi trạng thái cụm đến khi hồi phục.
-> **Kết quả KHÔNG chứng minh:** đây là tắt máy đột ngột, không phải thông báo gián đoạn spot 2 phút thật của AWS. Pod API **không** nằm trên node bị tắt (API 0 lỗi vì không bị ảnh hưởng, không phải vì chịu được). Chỉ một lần, chưa thử mất cả hai node hệ thống.
-
-| Mốc (giờ VN) | Sự kiện |
-|---|---|
-| 14:03:14 | `terminate-instances` lên node amd64 chứa pod frontend và pod giữ chỗ |
-| 14:03:16 | Karpenter nhận thông báo `instance_terminated`, bắt đầu `CordonAndDrain` (sau khoảng 2 giây) |
-| 14:03:16 đến 14:03:28 | Frontend lỗi: 2 request trả 502 và 1 request quá hạn 10 giây, tổng khoảng **12 giây** |
-| 14:03:28 | Frontend trả HTTP 200 trở lại; pod frontend mới chạy trên node arm64 còn chỗ |
-| 14:04:17 | Node cũ bị xoá khỏi cụm (còn 3 node Ready) |
-| 14:05:47 | Karpenter đã tạo node thay thế, 4 node Ready, **cả hai pod giữ chỗ chạy lại** (khoảng **2 phút 33 giây** sau khi tắt) |
-
-| Đường | Số request | Không phải HTTP 200 |
-|---|---|---|
-| Frontend `/` | 228 | **3** |
-| API `/healthz` | 209 | 0 |
-
-**Kết luận:** mất node đột ngột làm frontend (1 pod) gián đoạn khoảng 12 giây với 3 request lỗi, rồi tự hồi phục không cần can thiệp tay. Chỗ trống dự phòng được bù lại sau khoảng 2,5 phút. Muốn không gián đoạn thì cần tối thiểu 2 pod frontend, đổi lại mất tính tiết kiệm.
-**Phát hiện thêm trong bài này:** DaemonSet `image-prepuller` trỏ tới image `demo-web:0.3.0` đã không còn trong ECR (chỉ còn 0.3.2 và 0.3.3), nên trên mọi node mới pod prepull báo `ImagePullBackOff` và **không tải sẵn được image**. Đây là lỗi cấu hình, đã sửa sau bài test (xem mục 7). Các lần `api_running = 0` thoáng qua trong `timeline.csv` là nhiễu lấy mẫu (mọi request API vẫn trả 200).
-Dữ liệu: `docs/evidence/spot-loss/` (`probe.csv`, `timeline.csv`, `markers.csv`, `karpenter.log`, `nodes_*.txt`, `pods_*.txt`, `summary.txt`).
-
-### 5.5 Chart Helm dùng được với image bất kỳ
-
-> **Mục đích:** Chứng minh cùng chart `charts/app` chạy được image của bên thứ ba chỉ bằng cách đổi image, cổng và tham số.
-> **Cách test:** `scripts/test-plug-image.sh`: cài `nginx:1.27`, `hashicorp/http-echo`, `gcr.io/google-samples/hello-app:1.0` (chỉ amd64), gọi HTTP từ pod trong cụm, rồi phép thử đối chứng ép image amd64 lên arm64.
-> **Kết quả KHÔNG chứng minh:** chỉ dịch vụ HTTP. `nginx` và `http-echo` có cả hai kiến trúc nhưng đều rơi vào node amd64, nên chạy trên arm64 chưa được chứng minh. Chưa thử image dùng volume, TCP, gRPC, registry riêng hay chạy non-root.
+> **Mục đích:** Chứng minh cùng chart chạy được image bên thứ ba chỉ bằng cách đổi image, cổng và tham số.
+> **Cách test:** `scripts/test-plug-image.sh 2>&1 | tee docs/evidence/plug-image/result.txt` (nginx, http-echo, hello-app chỉ amd64, và phép thử đối chứng ép image amd64 lên arm64).
+> **Kết quả KHÔNG chứng minh:** chỉ dịch vụ HTTP; image đa kiến trúc rơi vào node nào là do Karpenter chọn, nên chưa chắc chạy trên arm64; chưa thử volume, TCP, gRPC, registry riêng, non-root.
 
 | Image | Kiến trúc phát hiện | Chạy trên | HTTP |
 |---|---|---|---|
-| `nginx:1.27` | auto | amd64 | 200 |
-| `hashicorp/http-echo:latest` | auto | amd64 | 200 |
-| `hello-app:1.0` | amd64 | amd64 | 200 |
-| `hello-app:1.0` ép `arch=arm64` (đối chứng) | | pod không Ready (`CrashLoopBackOff`) | |
+| chưa đo | | | |
 
-**Kết luận:** cả 3 image chạy bằng cùng một chart; image chỉ có amd64 bị ép lên arm64 thì đúng là không chạy, nên việc chọn kiến trúc có tác dụng. Dòng cuối của script: `RESULT: all checks passed`.
-Dữ liệu: `docs/evidence/plug-image/result.txt`.
+## 11. Kiến trúc arm64
 
-## 6. Tổng kết: hệ thống và các phương pháp đã áp dụng
+> **Mục đích:** Chứng minh pod API, frontend và worker thật chạy được trên node arm64.
+> **Cách test:** kiểm tra manifest image trong ECR có `linux/arm64`; ép từng ứng dụng `arch=arm64`, gọi một request/message, ghi node và kiến trúc node.
+> **Kết quả KHÔNG chứng minh:** hiệu năng arm64 so với amd64 nếu chưa đo cold start riêng trên arm64.
 
-### 6.1 Hệ thống gồm gì
+| Ứng dụng | Image có arm64 | Chạy trên node arm64 | Kết quả |
+|---|---|---|---|
+| chưa đo | | | |
 
-- **Ứng dụng:** API viết bằng Go (32 endpoint, miền tuyển dụng: vị trí, ứng viên, hồ sơ...), frontend React (nginx), worker Go xử lý hàng đợi.
-- **Hạ tầng AWS (vùng `ap-southeast-1`):** EKS 1.33, ALB đứng trước (một ALB dùng chung cho API và frontend), SQS (kèm hàng đợi lỗi DLQ), Aurora PostgreSQL Serverless v2 (0,5 đến 2 ACU, không bao giờ tạm dừng), ECR chứa image. Tất cả dựng bằng Terraform.
-- **Chưa làm:** Route 53 (chưa có tên miền); hiện truy cập bằng địa chỉ DNS của ALB.
-- **Chart Helm dùng chung `charts/app`:** thay image và cấu hình là chạy được API, frontend hay ứng dụng khác (đã kiểm chứng bằng `scripts/test-plug-image.sh`); chọn chế độ co giãn bằng một giá trị (`hpa`, `http`, `sqs`, `none`).
+## 12. Hạn chế đã biết (không phải số đo)
 
-### 6.2 Ba tầng co giãn
-
-| Tầng | Công cụ | Áp dụng cho | Co giãn theo | Giới hạn |
-|---|---|---|---|---|
-| Node | Karpenter | mọi pod không còn chỗ chạy | pod ở trạng thái chưa xếp được | pool `default` tối đa 16 vCPU, pool `worker` tối đa 12 vCPU |
-| Pod | KEDA HTTP Add-on | API | số request đồng thời (mục tiêu 100 mỗi pod) | **0 đến 2 pod** (về 0 sau 300 giây không có request) |
-| Pod | HPA | Frontend | CPU 50% so với mức pod xin | **1 đến 2 pod** |
-| Pod | KEDA + SQS | Worker | độ dài hàng đợi (mục tiêu 5 message mỗi pod) | **0 đến 20 pod** |
-
-### 6.3 Các phương pháp để giảm thời gian chờ (over-provisioning và liên quan)
-
-1. **Chỗ trống dự phòng bằng pod giữ chỗ (placeholder), tức over-provisioning có kiểm soát:**
-   - Luôn có **2 node spot** thuộc pool `default` chạy sẵn: **1 node amd64 và 1 node arm64**, mỗi node có **1 pod giữ chỗ** (image `pause`, xin 500m CPU và 512 MiB RAM, độ ưu tiên -10, không bị Karpenter gom).
-   - Node là loại 2 vCPU, nên sau khi trừ phần pod giữ chỗ và hệ thống thì **mỗi node còn trống khoảng 1,28 vCPU** để pod API/frontend mới xếp vào ngay, **không phải chờ tạo node** (tạo node mất khoảng 40 đến 50 giây).
-   - Khi chỗ trống hết, pod thật (độ ưu tiên 0) đẩy pod giữ chỗ ra; pod giữ chỗ chưa xếp được sẽ khiến Karpenter tạo node thay thế, nên chỗ trống tự được bù lại.
-   - Chi phí của phương pháp này: **2 node spot chạy liên tục** kể cả khi không ai dùng.
-2. **Tải sẵn image (pre-pull):** một DaemonSet chạy các image API/frontend trên mọi node (init container chạy `-version` rồi thoát) để image đã nằm trong bộ nhớ đệm của node, pod mới không mất thời gian kéo image.
-3. **Bỏ `startupProbe` của API:** đo được trung vị giảm từ 2,97 xuống 2,06 giây vì kubelet chạy hai probe nối tiếp. Giữ `readinessProbe` 1 giây vì bỏ nó không nhanh hơn (đã đo).
-4. **Cấu hình VPC CNI `WARM_IP_TARGET=3` và `MINIMUM_IP_TARGET=6`:** node giữ sẵn địa chỉ IP, pod mới không phải chờ cấp IP.
-5. **Interceptor của KEDA giữ request** trong lúc API bật từ 0 lên 1, nên người dùng chỉ thấy chậm hơn chứ không nhận lỗi.
-6. **Pool riêng cho worker:** pool `worker` có taint, chỉ worker chạy ở đó, không tranh chỗ với API/frontend.
-
-### 6.4 Số lượng tài nguyên lúc nhàn rỗi và lúc cao tải
-
-| Thành phần | Nhàn rỗi | Cao tải (tối đa đã đặt) |
-|---|---|---|
-| Node hệ thống (nhóm node có sẵn của EKS, spot) | 2 node `t3.medium` | 2 (cố định) |
-| Node `default` (spot) | 2 (1 amd64, 1 arm64, mỗi node có 1 pod giữ chỗ) | tăng theo nhu cầu, tối đa 16 vCPU |
-| Node `worker` (spot) | 0 | tối đa 12 vCPU (đo được 3 node khi 20 worker chạy) |
-| Pod API | **0** | 2 |
-| Pod frontend | 1 | 2 |
-| Pod worker | **0** | 20 |
-| Aurora | 0,5 ACU | 2 ACU |
-
-**Về nguồn tính toán:** toàn bộ node đều là **spot** theo yêu cầu của bạn (chấp nhận rủi ro bị thu hồi). Đã thử mất một node đột ngột (mục 5.4): frontend gián đoạn khoảng 12 giây rồi tự hồi phục; chưa thử mất cả hai node hệ thống cùng lúc.
-
-### 6.5 Đánh giá theo yêu cầu
-
-| Yêu cầu | Trạng thái |
-|---|---|
-| API Go 20 đến 50 endpoint | **Đạt** (32 endpoint, đã có kiểm thử tự động và kiểm thử qua ALB) |
-| Frontend React | **Đạt** |
-| ALB | **Đạt** |
-| Route 53 | **Chưa làm** (chưa có tên miền) |
-| Ba tầng co giãn (Karpenter, KEDA với SQS, HPA) | **Đạt**, có bằng chứng ở mục 5 |
-| API scale to zero | **Đạt** |
-| Cold start dưới 3 giây | **Phần lớn đạt:** 19/20 lượt, có 1 lượt 3,07 giây; chưa thể nói "luôn dưới 3 giây" |
-| 200 user cùng lúc | **Đạt**, nhưng database gần hết dư địa (xem mục 4) |
-| Toàn bộ node là spot, arm64 và amd64 | **Đạt** |
-| Aurora Serverless v2 không tạm dừng | **Đạt** (tối thiểu 0,5 ACU) |
-| Chart dùng được với image bất kỳ | **Đạt** |
-| Huỷ toàn bộ hạ tầng | Có sẵn `scripts/down.sh` (đã thử chế độ `--dry-run`); **chưa chạy thật** |
-
-## 7. Hạn chế của các số đo trên
-
-- Đo từ **một máy** ngoài AWS, nên gồm round trip mạng của máy đó và các lần mất gói SYN ngẫu nhiên (mục 3).
-- Cold start mỗi lần chỉ 20 lượt; p95 của 20 mẫu là ước lượng thô.
-- Dấu thời gian pod của Kubernetes chỉ chính xác đến 1 giây, nên các cột "Pod tạo sau request" và "Pod tạo đến sẵn sàng" có sai số khoảng 1 giây.
-- Pod API luôn rơi vào node đã có chỗ trống (headroom). Chưa đo cold start khi chỗ trống đã hết (lúc đó phải tạo node mới, đo được khoảng 36 giây ở một lần thử riêng).
-- Bài tải 200 user dùng kết nối giữ lâu (keep-alive) và nghỉ 1 giây giữa các lượt; chưa thử tải cao hơn 200 user, và chưa thử 200 user mới kết nối cùng một giây khi API đang ở 0 pod ngoài lượt đầu của bài A.
-- **Tải sẵn image đang hỏng trên node mới** (phát hiện ở mục 5.4): DaemonSet `image-prepuller` vẫn dùng tag 0.3.0 của `demo-web`, tag đã không còn trong ECR. Trên node mới, pod prepull kẹt `ImagePullBackOff`, nên image không được tải sẵn và cold start trên node mới có thể chậm hơn các số đo. Các bài cold start đo trên node đã có image sẵn. **Đã sửa** sau bài test: `prepull_images` đổi sang `demo-api:0.3.4`, `demo-web:0.3.3` và áp dụng bằng Terraform (1 thay đổi, 0 thêm, 0 xoá); cả hai pod prepull trên node mới chuyển sang `Running`. Các bài đo ở trên được thực hiện trước khi sửa.
+- Route 53 chưa làm; chỉ HTTP.
+- Frontend và API chỉ có 1 pod nền: mất node là gián đoạn ngắn.
+- Vụ 3 pod worker mỗi lần Score chưa giải quyết: cần theo dõi một lần bấm khi worker đang 0 pod.
+- Worker chạy ở pool `default` cần bài hồi quy đầy đủ (bài 6) vì chung chỗ với API và frontend.

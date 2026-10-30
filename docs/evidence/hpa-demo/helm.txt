@@ -1,8 +1,0 @@
-Release "hpa-demo" does not exist. Installing it now.
-NAME: hpa-demo
-LAST DEPLOYED: Mon Oct 26 15:12:05 2026
-NAMESPACE: hpa-demo
-STATUS: deployed
-REVISION: 1
-DESCRIPTION: Install complete
-TEST SUITE: None

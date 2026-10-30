@@ -1,3 +1,0 @@
-$ kubectl -n demo get hpa fe
-NAME   REFERENCE       TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
-fe     Deployment/fe   cpu: 1%/50%   1         2         1          3h38m

@@ -1,5 +1,0 @@
-NAME                        READY   STATUS      RESTARTS   AGE     IP            NODE                                             NOMINATED NODE   READINESS GATES
-hpa-demo-6664b749df-8wsrv   1/1     Running     0          3m33s   10.0.47.156   ip-10-0-35-242.ap-southeast-1.compute.internal   <none>           <none>
-hpa-demo-6664b749df-zdc4z   1/1     Running     0          2m17s   10.0.11.246   ip-10-0-3-182.ap-southeast-1.compute.internal    <none>           <none>
-hpa-demo-6664b749df-zw5m6   1/1     Running     0          2m2s    10.0.45.172   ip-10-0-35-242.ap-southeast-1.compute.internal   <none>           <none>
-load                        0/1     Completed   0          3m8s    10.0.34.30    ip-10-0-35-242.ap-southeast-1.compute.internal   <none>           <none>

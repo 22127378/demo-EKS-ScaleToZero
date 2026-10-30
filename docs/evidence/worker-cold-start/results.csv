@@ -1,7 +1,0 @@
-label,run,pod_ready_s,drained_s,node_created
-before-worker-pool,1,55.475102082,61.369391209,3
-before-worker-pool,2,4.455642701,4.455642701,0
-after-default-pool,1,18.609213894,27.778025652,0
-after-default-pool,2,12.268771314,15.309407780,0
-poll1-nostartup,1,9.292878235,19.931316892,0
-poll1-nostartup,2,6.238142084,15.410676892,0
