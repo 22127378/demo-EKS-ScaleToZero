@@ -2,13 +2,27 @@ import Recruitment from "./Recruitment";
 
 export default function App() {
   return (
-    <main>
-      <h1>Recruitment on a scaling cluster</h1>
-      <p className="muted">
-        A small applicant tracking app. The API scales to zero pods when idle and wakes up on the first request; scoring jobs run on
-        workers that scale with the queue.
-      </p>
-      <Recruitment />
-    </main>
+    <>
+      <header className="topbar">
+        <div className="topbar-inner">
+          <span className="brand">
+            <span className="brand-mark" aria-hidden="true">R</span>
+            Recruit
+          </span>
+          <span className="topbar-note">Hiring dashboard</span>
+        </div>
+      </header>
+      <main>
+        <section className="hero">
+          <h1>Hiring, one place</h1>
+          <p>
+            Track open positions, applicants and their applications. Scoring jobs run on workers that start on demand, and the API wakes up
+            from zero pods on the first request.
+          </p>
+        </section>
+        <Recruitment />
+      </main>
+      <footer className="footer">Runs on Kubernetes with autoscaling API, workers and nodes.</footer>
+    </>
   );
 }

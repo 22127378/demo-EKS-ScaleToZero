@@ -184,52 +184,70 @@ export default function Recruitment() {
   }, [d.applications, scoring]);
 
   const over = elapsed > TARGET_MS;
-  const last = activity[0];
+  const lastApi = activity.find((a) => a.kind !== "worker");
+  const lastWorker = activity.find((a) => a.kind === "worker");
 
   return (
     <>
-      <section className="card activity">
-        {pending ? (
-          <>
-            <div className="muted">{pending}: waiting for the API...</div>
-            <div className={over ? "big bad" : "big"}>{(elapsed / 1000).toFixed(2)} s</div>
-            <div className="bar">
-              <div className={over ? "bar-fill bad-bg" : "bar-fill"} style={{ width: `${Math.min(100, (elapsed / TARGET_MS) * 100)}%` }} />
-            </div>
-          </>
-        ) : waitingIds.length > 0 ? (
-          <>
-            <div className="muted">Scoring queued: waiting for a worker pod ({waitingIds.length} job{waitingIds.length > 1 ? "s" : ""})...</div>
-            <div className="big">{(workerWait / 1000).toFixed(2)} s</div>
-            <div className="muted">Starts when you pressed Score and stops when the score appears. If no worker was running, KEDA starts one first.</div>
-          </>
-        ) : last ? (
-          <>
+      <div className="timers">
+        <section className="card activity">
+          <div className="timer-title">API response time</div>
+          {pending ? (
+            <>
+              <div className="muted">{pending}: waiting for the API...</div>
+              <div className={over ? "big bad" : "big"}>{(elapsed / 1000).toFixed(2)} s</div>
+              <div className="bar">
+                <div className={over ? "bar-fill bad-bg" : "bar-fill"} style={{ width: `${Math.min(100, (elapsed / TARGET_MS) * 100)}%` }} />
+              </div>
+            </>
+          ) : lastApi ? (
+            <>
+              <div className="muted">
+                {lastApi.label}: {lastApi.ok ? "done" : "failed"} in
+              </div>
+              <div className={lastApi.ok && lastApi.ms <= TARGET_MS ? "big" : "big bad"}>{(lastApi.ms / 1000).toFixed(2)} s</div>
+              <div className="muted">
+                {lastApi.kind === "cold start"
+                  ? "Cold start: the API had no pod running and woke up for this request."
+                  : lastApi.kind === "warm"
+                    ? "Warm: the API was already running."
+                    : "Could not tell whether the API was asleep."}
+                {lastApi.ok ? "" : ` ${lastApi.detail}`}
+              </div>
+            </>
+          ) : (
             <div className="muted">
-              {last.label}: {last.ok ? "done" : "failed"} in
+              Do something below (add a position, add an applicant, apply). The time the API takes to answer shows here. If the API has been
+              idle for a while it runs on zero pods, and the first action includes waking it up.
             </div>
-            <div className={last.ok && (last.kind === "worker" || last.ms <= TARGET_MS) ? "big" : "big bad"}>{(last.ms / 1000).toFixed(2)} s</div>
-            <div className="muted">
-              {last.kind === "worker"
-                ? "Time from pressing Score to the score appearing: queue wait, worker pod start (if none was running) and about 2 s of scoring."
-                : last.kind === "cold start"
-                ? "Cold start: the API had no pod running and woke up for this request."
-                : last.kind === "warm"
-                  ? "Warm: the API was already running."
-                  : "Could not tell whether the API was asleep."}
-              {last.ok ? "" : ` ${last.detail}`}
-            </div>
-          </>
-        ) : (
-          <div className="muted">
-            Do something below (add a position, add an applicant, apply, score). The time the API takes to answer shows here. If the API has
-            been idle for a while it runs on zero pods, and the first action includes waking it up.
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+
+        <section className="card activity worker">
+          <div className="timer-title">Worker scoring time</div>
+          {waitingIds.length > 0 ? (
+            <>
+              <div className="muted">Waiting for a worker pod ({waitingIds.length} job{waitingIds.length > 1 ? "s" : ""})...</div>
+              <div className="big">{(workerWait / 1000).toFixed(2)} s</div>
+              <div className="muted">From pressing Score until the score appears. If no worker was running, KEDA starts one first.</div>
+            </>
+          ) : lastWorker ? (
+            <>
+              <div className="muted">{lastWorker.label}: finished in</div>
+              <div className="big">{(lastWorker.ms / 1000).toFixed(2)} s</div>
+              <div className="muted">
+                Queue wait, worker pod start (if none was running) and the scoring itself. Does not include the API call, which is shown on
+                the left.
+              </div>
+            </>
+          ) : (
+            <div className="muted">Press Score on an application. The time from the click until the score appears shows here.</div>
+          )}
+        </section>
+      </div>
 
       <div className="row">
-        <button onClick={() => void loadData()} disabled={!!pending}>Load data</button>
+        <button className="secondary" onClick={() => void loadData()} disabled={!!pending}>Load data</button>
         <button
           disabled={!!pending}
           onClick={() => act("Add sample data", async () => { const r = await seed(); return `Added ${r.applicants} applicants, ${r.positions} positions, ${r.applications} applications`; })}
@@ -242,19 +260,19 @@ export default function Recruitment() {
       <section className="card">
         <h2>Overview</h2>
         <div className="tiles">
-          <Tile label="Open positions" value={d.summary.positionsOpen} />
+          <Tile label="Open positions" value={d.summary.positionsOpen} tone="accent" />
           <Tile label="Closed positions" value={d.summary.positionsClosed} />
           <Tile label="Applicants" value={d.summary.applicants} />
           <Tile label="Applications" value={d.summary.applications} />
-          <Tile label="Scoring queued" value={d.summary.screeningQueued} />
-          <Tile label="Scoring done" value={d.summary.screeningDone} />
+          <Tile label="Scoring queued" value={d.summary.screeningQueued} tone="warn" />
+          <Tile label="Scoring done" value={d.summary.screeningDone} tone="ok" />
         </div>
         <p className="muted">Applications by status: {STATUSES.map((s) => `${s} ${d.byStatus[s] ?? 0}`).join(" · ")}</p>
         {d.top.length > 0 && <p className="muted">Most applied: {d.top.map((t) => `${t.title} (${t.applications})`).join(", ")}</p>}
       </section>
 
       <section className="card">
-        <h2>Positions</h2>
+        <h2>Positions <span className="count">{d.positions.length}</span></h2>
         <form
           className="row"
           onSubmit={(e) => {
@@ -278,12 +296,13 @@ export default function Recruitment() {
             <tr><th>Title</th><th>Department</th><th>Location</th><th>Status</th><th /></tr>
           </thead>
           <tbody>
+            {d.positions.length === 0 && <tr><td colSpan={5} className="empty">No positions yet. Add one above, or use Add sample data.</td></tr>}
             {d.positions.map((p) => (
               <tr key={p.id}>
                 <td>{p.title}</td>
                 <td>{p.department}</td>
                 <td>{p.location}</td>
-                <td>{p.status}</td>
+                <td><span className={`chip ${p.status}`}>{p.status}</span></td>
                 <td>
                   {p.status === "open" && (
                     <button className="small" disabled={!!pending} onClick={() => act("Close position", async () => { await closePosition(p.id); return "Position closed"; })}>Close</button>
@@ -297,7 +316,7 @@ export default function Recruitment() {
       </section>
 
       <section className="card">
-        <h2>Applicants</h2>
+        <h2>Applicants <span className="count">{d.applicants.length}</span></h2>
         <form
           className="row"
           onSubmit={(e) => {
@@ -321,6 +340,7 @@ export default function Recruitment() {
             <tr><th>Name</th><th>Email</th><th>Skills</th><th /></tr>
           </thead>
           <tbody>
+            {d.applicants.length === 0 && <tr><td colSpan={4} className="empty">No applicants yet.</td></tr>}
             {d.applicants.map((a) => (
               <tr key={a.id}>
                 <td>{a.name}</td>
@@ -336,7 +356,7 @@ export default function Recruitment() {
       </section>
 
       <section className="card">
-        <h2>Applications</h2>
+        <h2>Applications <span className="count">{d.applications.length}</span></h2>
         <form
           className="row"
           onSubmit={(e) => {
@@ -363,6 +383,7 @@ export default function Recruitment() {
             <tr><th>Applicant</th><th>Position</th><th>Status</th><th>Scoring</th><th /></tr>
           </thead>
           <tbody>
+            {d.applications.length === 0 && <tr><td colSpan={5} className="empty">No applications yet. Pick an applicant and a position above.</td></tr>}
             {d.applications.map((a) => (
               <tr key={a.id}>
                 <td>{applicantName(a.applicantId)}</td>
@@ -372,7 +393,7 @@ export default function Recruitment() {
                     {STATUSES.map((x) => <option key={x}>{x}</option>)}
                   </select>
                 </td>
-                <td>{a.screeningStatus === "done" ? `score ${a.screeningScore}` : a.screeningStatus}</td>
+                <td>{a.screeningStatus === "done" ? <span className="chip done">score {a.screeningScore}</span> : <span className={`chip ${a.screeningStatus}`}>{a.screeningStatus}</span>}</td>
                 <td>
                   <button className="small" disabled={!!pending} onClick={() => { const t0 = performance.now(); void act("Queue scoring", async () => { await screen(a.id); setScoring((prev) => ({ ...prev, [a.id]: t0 })); return "Scoring queued"; }); }}>Score</button>{" "}
                   <button className="small danger" disabled={!!pending} onClick={() => confirmDelete("Delete this application?") && act("Delete application", async () => { await deleteApplication(a.id); return "Application deleted"; })}>Delete</button>
@@ -387,7 +408,7 @@ export default function Recruitment() {
         <h2>Activity</h2>
         <table>
           <thead>
-            <tr><th>Time</th><th>Action</th><th>Took</th><th>Kind</th><th>Result</th></tr>
+            <tr><th>Time</th><th>Action</th><th>Took</th><th>Source</th><th>Result</th></tr>
           </thead>
           <tbody>
             {activity.map((a, i) => (
@@ -395,7 +416,7 @@ export default function Recruitment() {
                 <td>{a.at.toLocaleTimeString()}</td>
                 <td>{a.label}</td>
                 <td>{(a.ms / 1000).toFixed(2)} s</td>
-                <td>{a.kind}</td>
+                <td>{a.kind === "worker" ? "Worker" : `API (${a.kind})`}</td>
                 <td>{a.detail}</td>
               </tr>
             ))}
@@ -406,9 +427,9 @@ export default function Recruitment() {
   );
 }
 
-function Tile({ label, value }: { label: string; value: number }) {
+function Tile({ label, value, tone = "" }: { label: string; value: number; tone?: string }) {
   return (
-    <div className="tile">
+    <div className={`tile ${tone}`}>
       <div className="tile-value">{value}</div>
       <div className="muted">{label}</div>
     </div>
