@@ -1,0 +1,36 @@
+{{- if gt (int .Values.placeholder.worker.replicas) 0 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: placeholder-worker
+  labels: {{- include "cc.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.placeholder.worker.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: placeholder-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: placeholder-worker
+      annotations:
+        # Keeps Karpenter from consolidating away the node that holds the worker headroom.
+        karpenter.sh/do-not-disrupt: "true"
+    spec:
+      priorityClassName: placeholder
+      # Zero grace period so eviction by a real worker pod is immediate.
+      terminationGracePeriodSeconds: 0
+      nodeSelector:
+        nodepool: worker
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: worker
+          effect: NoSchedule
+      containers:
+        - name: pause
+          image: {{ .Values.placeholder.image }}
+          resources:
+            requests: {{- toYaml .Values.placeholder.requests | nindent 14 }}
+{{- end }}

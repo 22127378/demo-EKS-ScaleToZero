@@ -33,10 +33,10 @@ spec:
           values: ["spot"]
         - key: karpenter.k8s.aws/instance-family
           operator: In
-          values: {{ concat $.Values.families.amd64 $.Values.families.arm64 | toJson }}
+          values: {{ default (concat $.Values.families.amd64 $.Values.families.arm64) $pool.families | toJson }}
         - key: karpenter.k8s.aws/instance-cpu
           operator: In
-          values: {{ $.Values.instanceCpu | toJson }}
+          values: {{ default $.Values.instanceCpu $pool.instanceCpu | toJson }}
         - key: karpenter.k8s.aws/instance-memory
           operator: Gt
           values: [{{ $.Values.minMemoryMiB | quote }}]

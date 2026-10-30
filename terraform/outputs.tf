@@ -64,3 +64,8 @@ output "db_secret_arn" {
   description = "Secrets Manager secret holding the database username and password."
   value       = aws_rds_cluster.aurora.master_user_secret[0].secret_arn
 }
+
+output "grafana_access" {
+  description = "How to open Grafana (not exposed to the internet)."
+  value       = var.enable_monitoring ? "kubectl -n monitoring port-forward svc/grafana 3000:80  then http://localhost:3000 (user admin, password: kubectl -n monitoring get secret grafana -o jsonpath='{.data.admin-password}' | base64 -d)" : "monitoring disabled"
+}

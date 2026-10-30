@@ -156,7 +156,10 @@ resource "helm_release" "keda" {
 
     operator      = { replicaCount = 2 }
     metricsServer = { replicaCount = 1 }
-    webhooks      = { replicaCount = 1 }
+
+    # Expose scaler and ScaledObject metrics on :8080 so Prometheus can scrape them.
+    prometheus = { operator = { enabled = true, port = 8080 } }
+    webhooks   = { replicaCount = 1 }
 
     resources = {
       operator     = { requests = { cpu = "50m", memory = "64Mi" }, limits = { memory = "512Mi" } }

@@ -30,8 +30,9 @@ resource "helm_release" "cluster_config" {
     }
 
     placeholder = {
-      amd64 = { replicas = var.placeholder_amd64_replicas }
-      arm64 = { replicas = var.placeholder_arm64_replicas }
+      amd64  = { replicas = var.placeholder_amd64_replicas }
+      arm64  = { replicas = var.placeholder_arm64_replicas }
+      worker = { replicas = var.placeholder_worker_replicas }
     }
 
     prepull = {

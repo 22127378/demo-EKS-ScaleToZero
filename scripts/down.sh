@@ -67,7 +67,7 @@ if aws eks describe-cluster --region "$region" --name "$cluster" >/dev/null 2>&1
 
   say "2/4 Remove the Karpenter nodes"
   # The placeholder pods carry do-not-disrupt, which would keep their nodes alive: remove them first.
-  kubectl -n kube-system delete deploy placeholder-amd64 placeholder-arm64 --ignore-not-found --wait=false || true
+  kubectl -n kube-system delete deploy placeholder-amd64 placeholder-arm64 placeholder-worker --ignore-not-found --wait=false || true
   kubectl delete nodepool --all --wait=false || true
   # Wait until Karpenter has really terminated its EC2 instances. Terraform removes Karpenter's IAM
   # permissions during destroy, so any node left behind here could no longer be cleaned up.

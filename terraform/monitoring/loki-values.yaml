@@ -1,0 +1,55 @@
+# Loki in single-binary mode. Chunks and the index go to S3 (see logging.tf), so logs survive pod, node and
+# cluster loss. The pod keeps only a small local cache (emptyDir), so nothing is left behind on destroy.
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: s3
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+  limits_config:
+    retention_period: 168h
+    allow_structured_metadata: true
+  compactor:
+    retention_enabled: true
+    delete_request_store: s3
+  pattern_ingester:
+    enabled: false
+
+singleBinary:
+  replicas: 1
+  nodeSelector:
+    node-role: system
+  persistence:
+    enabled: false
+  # With persistence off the chart mounts nothing at /var/loki and the root filesystem is read-only.
+  extraVolumes:
+    - name: data
+      emptyDir: {}
+  extraVolumeMounts:
+    - name: data
+      mountPath: /var/loki
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 768Mi }
+
+serviceAccount:
+  name: loki
+
+backend: { replicas: 0 }
+read: { replicas: 0 }
+write: { replicas: 0 }
+gateway: { enabled: false }
+chunksCache: { enabled: false }
+resultsCache: { enabled: false }
+lokiCanary: { enabled: false }
+minio: { enabled: false }
+test: { enabled: false }

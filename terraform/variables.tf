@@ -135,6 +135,12 @@ variable "placeholder_arm64_replicas" {
   default     = 1
 }
 
+variable "placeholder_worker_replicas" {
+  description = "Placeholder pods on the worker NodePool (each keeps one 4 vCPU spot node warm for worker Jobs). 0 disables."
+  type        = number
+  default     = 1
+}
+
 variable "prepull_images" {
   description = "Images the pre-puller keeps cached on every Karpenter node. command must exit immediately (e.g. [\"/app\", \"-version\"])."
   type = list(object({
@@ -183,4 +189,46 @@ variable "app_namespace" {
   description = "Kubernetes namespace of the demo apps (the Pod Identity associations are bound to it)."
   type        = string
   default     = "demo"
+}
+
+variable "enable_monitoring" {
+  description = "Install Prometheus and Grafana (monitoring namespace, system nodes, no persistent storage)."
+  type        = bool
+  default     = true
+}
+
+variable "prometheus_chart_version" {
+  description = "prometheus-community/prometheus Helm chart version."
+  type        = string
+  default     = "29.39.0"
+}
+
+variable "grafana_chart_version" {
+  description = "grafana/grafana Helm chart version."
+  type        = string
+  default     = "10.5.15"
+}
+
+variable "enable_logging" {
+  description = "Install Loki (logs in S3) and Alloy (log shipper). Needs enable_monitoring for the shared namespace and Grafana."
+  type        = bool
+  default     = true
+}
+
+variable "log_retention_days" {
+  description = "Days before logs expire from the S3 bucket."
+  type        = number
+  default     = 7
+}
+
+variable "loki_chart_version" {
+  description = "grafana/loki Helm chart version."
+  type        = string
+  default     = "7.5.0"
+}
+
+variable "alloy_chart_version" {
+  description = "grafana/alloy Helm chart version."
+  type        = string
+  default     = "1.14.4"
 }

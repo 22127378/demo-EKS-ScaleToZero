@@ -93,15 +93,30 @@ module "eks" {
   cloudwatch_log_group_retention_in_days = 7
 
   cluster_addons = {
-    coredns    = {}
-    kube-proxy = {}
+    # Pinned to the versions that are running so a new AWS build does not restart core components during an
+    # unrelated terraform apply. Bump them on purpose.
+    coredns = {
+      addon_version = "v1.12.4-eksbuild.66"
+      most_recent   = false
+    }
+    kube-proxy = {
+      addon_version = "v1.33.10-eksbuild.59"
+      most_recent   = false
+    }
     vpc-cni = {
+      addon_version  = "v1.22.4-eksbuild.8"
+      most_recent    = false
       before_compute = true
-      # Keep spare pod IPs attached to each node so a new pod does not wait for an ENI/IP allocation.
+      # Keep spare pod IPs attached to each node so a new pod does not wait for an ENI/IP allocation. Worker Jobs
+      # are short-lived pods created in bursts; with only 3 spare IPs a burst of ~10 Jobs on one node exhausted the
+      # pool and pods waited 11-39 s (FailedCreatePodSandBox "failed to assign an IP address") for the next retry.
+      # MINIMUM_IP_TARGET makes a node attach that many IPs as soon as it starts, so the first burst of Jobs on a
+      # freshly launched node finds a full pool (a fresh worker node measured a 12 s median pod start with only 12).
+      # A node never attaches more than its instance type allows (t3.medium 15, 4 vCPU nodes 56), so 30 is safe.
       configuration_values = jsonencode({
         env = {
-          WARM_IP_TARGET    = "3"
-          MINIMUM_IP_TARGET = "6"
+          WARM_IP_TARGET    = "10"
+          MINIMUM_IP_TARGET = "30"
         }
       })
     }

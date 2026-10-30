@@ -13,6 +13,9 @@ pools:
     taints: []
   worker:
     cpuLimit: "12"
+    # 4 vCPU nodes only: a bigger node holds more pod IPs (a t3.medium tops out at 15, a 4 vCPU node at ~58), and a
+    # burst of short-lived worker Jobs exhausts the IP pool of a small node (pods then wait 10+ s for an IP).
+    instanceCpu: ["4"]
     taints:
       - key: workload
         value: worker
@@ -43,6 +46,10 @@ placeholder:
   amd64:
     replicas: 1
   arm64:
+    replicas: 1
+  # A placeholder on the (tainted) worker pool keeps one worker node always up, so a worker Job starts at once
+  # instead of waiting ~50 s for a new node, and a burst of Jobs does not eat the API/FE headroom on "default".
+  worker:
     replicas: 1
 
 # Pre-pull: an init container per image runs a command that exits immediately, which

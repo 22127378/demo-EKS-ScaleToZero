@@ -1,0 +1,60 @@
+# Lean Prometheus: no Alertmanager, no Pushgateway, no node-exporter, no persistent volume (so nothing is
+# left behind on destroy). Data is kept for a few hours only; this is a live-demo monitor, not long-term storage.
+alertmanager:
+  enabled: false
+prometheus-pushgateway:
+  enabled: false
+prometheus-node-exporter:
+  enabled: false
+
+kube-state-metrics:
+  nodeSelector:
+    node-role: system
+  resources:
+    requests: { cpu: 10m, memory: 48Mi }
+    limits: { memory: 128Mi }
+
+server:
+  nodeSelector:
+    node-role: system
+  retention: 6h
+  global:
+    scrape_interval: 15s
+  persistentVolume:
+    enabled: false
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 768Mi }
+
+# Karpenter and KEDA expose Prometheus metrics but carry no scrape annotations.
+extraScrapeConfigs: |
+  - job_name: karpenter
+    static_configs:
+      - targets: ["karpenter.karpenter.svc:8080"]
+  - job_name: keda-operator
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [keda]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        regex: keda-operator
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_ip]
+        target_label: __address__
+        replacement: "$1:8080"
+  - job_name: keda-metrics-apiserver
+    static_configs:
+      - targets: ["keda-operator-metrics-apiserver.keda.svc:8080"]
+  - job_name: keda-http-interceptor
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [keda]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+        regex: interceptor
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_ip]
+        target_label: __address__
+        replacement: "$1:2223"
