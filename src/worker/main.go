@@ -58,7 +58,8 @@ func main() {
 		log.Error("QUEUE_URL is required")
 		os.Exit(1)
 	}
-	processTime := 2 * time.Second
+	// No artificial delay by default; PROCESS_TIME (e.g. "2s") adds one for experiments.
+	var processTime time.Duration
 	if d, err := time.ParseDuration(os.Getenv("PROCESS_TIME")); err == nil && d >= 0 {
 		processTime = d
 	}
@@ -73,6 +74,20 @@ func main() {
 	// spot interruption or scale-down does not drop work.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+
+	// ScaledJob mode: take one batch, process it and exit. No health server, the Job's pod just runs to completion.
+	if os.Getenv("WORKER_MODE") == "job" {
+		var sc screener
+		if d := db.New(); d != nil {
+			sc = d
+		}
+		batch := intFromEnv("JOB_BATCH", 5, 1, 10)
+		wait := intFromEnv("JOB_WAIT_SECONDS", 2, 0, 20)
+		log.Info("job started", "queue", queueURL, "batch", batch, "processTime", processTime.String(), "screening", sc != nil)
+		n := runOnce(ctx, sqs.NewFromConfig(cfg), queueURL, batch, wait, processTime, sc)
+		log.Info("job finished", "messages", n)
+		return
+	}
 
 	health := startHealth(":" + firstNonEmpty(os.Getenv("PORT"), "8080"))
 	defer func() {
@@ -130,7 +145,9 @@ func run(ctx context.Context, q queue, queueURL string, processTime time.Duratio
 // moves to the dead-letter queue.
 func handle(q queue, queueURL string, m types.Message, processTime time.Duration, sc screener) {
 	start := time.Now()
-	time.Sleep(processTime) // stand-in for real work
+	if processTime > 0 {
+		time.Sleep(processTime) // optional stand-in for real work
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

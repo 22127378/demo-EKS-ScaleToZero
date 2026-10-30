@@ -75,7 +75,7 @@ fi
 deploy api demo-api "${api_extra[@]}"
 deploy fe demo-web
 if [[ -n "$queue_url" ]]; then
-  worker_extra=(--set-string "env.QUEUE_URL=$queue_url" --set-string "scaling.sqs.queueURL=$queue_url")
+  worker_extra=(--set-string "env.QUEUE_URL=$queue_url" --set-string "scaling.sqsjob.queueURL=$queue_url")
   # The worker writes screening results to the database.
   if [[ -n "$db_endpoint" && -n "$db_secret" ]]; then
     worker_extra+=(--set-string "env.DB_HOST=$db_endpoint" --set-string "env.DB_NAME=$db_name" --set-string "env.DB_SECRET_ARN=$db_secret")

@@ -87,6 +87,12 @@ ingress:
 #   hpa  : HPA on CPU
 #   http : KEDA HTTP Add-on (scales to zero, ingress goes through the interceptor)
 #   sqs  : KEDA on SQS queue length
+# Start worker Jobs from this app right after it queues a message (see src/api/wake.go). Needs the app to read
+# WAKE_SCALEDJOB / WAKE_MAX_ACTIVE from env; this block only grants the permissions.
+wake:
+  enabled: false
+  scaledJob: worker
+
 scaling:
   mode: hpa
   hpa:
@@ -108,6 +114,26 @@ scaling:
     interceptorNamespace: keda
     interceptorService: keda-add-ons-http-interceptor-proxy
     interceptorPort: 8080
+    # Also scale on CPU (needs resources.requests.cpu). The HTTP add-on alone sees only request concurrency.
+    cpu:
+      enabled: false
+      utilization: 70           # percent of the CPU request, averaged over the pods
+    externalScalerAddress: keda-add-ons-http-external-scaler.keda:9090
+  # KEDA ScaledJob: one Kubernetes Job per batch of messages (scaling.mode = sqsjob). The Job ends when its batch is done.
+  sqsjob:
+    queueURL: ""
+    region: ap-southeast-1
+    messagesPerJob: 5           # messages one Job takes; also the queueLength target KEDA divides the queue by
+    max: 20                     # Jobs running at once
+    strategy: default           # default | accurate | eager; see the comment in templates/scaledjob-sqs.yaml
+    scaleOnInFlight: true       # false = count only visible messages (those a Job has not taken yet)
+    pendingPodConditions: []    # e.g. [Ready]: Jobs whose pod is not Ready yet count as pending
+    pollingInterval: 1          # seconds between queue checks
+    receiveWaitSeconds: 2       # how long a Job waits for messages before it gives up and exits
+    activeDeadlineSeconds: 300  # a Job running longer than this is killed
+    ttlSecondsAfterFinished: 120
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 5
   sqs:
     queueURL: ""
     region: ap-southeast-1
@@ -116,6 +142,10 @@ scaling:
     max: 20
     pollingInterval: 5          # seconds between SQS queue-length checks (also the worker's start-up latency)
     cooldownPeriod: 60
+    # Also scale on CPU (needs resources.requests.cpu); keeps scale-to-zero because the queue trigger still wakes the worker.
+    cpu:
+      enabled: false
+      utilization: 70
 
 pdb:
   enabled: true

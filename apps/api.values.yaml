@@ -3,7 +3,7 @@
 # (they contain the AWS account id and resource names).
 image:
   repository: demo-api
-  tag: 0.3.4
+  tag: 0.4.0
 arch: auto
 containerPort: 8080
 probe:
@@ -19,6 +19,11 @@ serviceAccount:
   create: true
 env:
   AWS_REGION: ap-southeast-1
+  WAKE_SCALEDJOB: worker     # start a worker Job right after queuing a message (needs the wake RBAC below)
+  WAKE_MAX_ACTIVE: "3"       # do not start one while this many worker Jobs are already active
+wake:
+  enabled: true
+  scaledJob: worker
 resources:
   requests: { cpu: 250m, memory: 64Mi }
   limits: { memory: 256Mi }

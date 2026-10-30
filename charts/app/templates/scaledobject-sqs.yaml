@@ -30,4 +30,11 @@ spec:
         queueLength: {{ .Values.scaling.sqs.queueLength | quote }}
         awsRegion: {{ .Values.scaling.sqs.region | quote }}
         identityOwner: operator
+{{- if .Values.scaling.sqs.cpu.enabled }}
+    # CPU as a second signal: a worker doing heavy work per message needs more pods than the queue length alone says.
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: {{ .Values.scaling.sqs.cpu.utilization | quote }}
+{{- end }}
 {{- end }}

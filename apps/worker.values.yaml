@@ -1,28 +1,24 @@
-# Worker: KEDA SQS 0..20, runs on the default NodePool to reuse its warm headroom (the worker NodePool still exists but is unused).
+# Worker: KEDA ScaledJob, one Kubernetes Job per batch of queue messages (up to 20 Jobs at once), runs on the worker
+# NodePool (4 vCPU spot nodes, tainted) which keeps one node warm through its own placeholder pod.
 # The image repository and the queue URL are set by scripts/deploy-apps.sh.
 image:
   repository: demo-worker
-  tag: 0.3.0
+  tag: 0.4.1
 arch: auto
-containerPort: 8080           # the worker serves /healthz here
-probe:
-  httpPath: /healthz
-nodePool: default           # default pool = uses the always-warm headroom (was: worker, which needed a new node per cold start)
+nodePool: worker            # own pool + own placeholder: warm node for Jobs, and bursts stay off the API/FE nodes
 serviceAccountName: worker   # bound to an IAM role by Terraform (receive/delete on the queue)
 serviceAccount:
   create: true
 env:
   AWS_REGION: ap-southeast-1
-  PROCESS_TIME: 2s           # simulated work per message
 resources:
   requests: { cpu: 100m, memory: 64Mi }
   limits: { memory: 256Mi }
 ingress:
   enabled: false
 scaling:
-  mode: sqs
-  sqs:
+  mode: sqsjob
+  sqsjob:
     region: ap-southeast-1
-    queueLength: "5"
-    min: 0
+    messagesPerJob: 10
     max: 20

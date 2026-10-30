@@ -5,6 +5,12 @@ kind: HTTPScaledObject
 metadata:
   name: {{ include "app.name" . }}
   labels: {{- include "app.labels" . | nindent 4 }}
+  {{- if .Values.scaling.http.cpu.enabled }}
+  annotations:
+    # The HTTP add-on can scale on request concurrency only. With CPU scaling on, this chart writes its own
+    # ScaledObject (below) that carries both triggers, so the add-on must not create one.
+    httpscaledobject.keda.sh/skip-scaledobject-creation: "true"
+  {{- end }}
 spec:
   hosts:
     - {{ required "ingress.host is required when scaling.mode=http" .Values.ingress.host }}
@@ -24,4 +30,34 @@ spec:
   timeouts:
     conditionWait: {{ .Values.scaling.http.requestTimeout }}
     responseHeader: {{ .Values.scaling.http.requestTimeout }}
+{{- if .Values.scaling.http.cpu.enabled }}
+---
+# Scale on request concurrency (the HTTP add-on's own trigger, which also does 0 <-> 1) AND on CPU. The larger
+# of the two wanted replica counts wins, so a few CPU-heavy requests add a pod even when concurrency is low.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "app.name" . }}
+  labels: {{- include "app.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "app.name" . }}
+  minReplicaCount: {{ .Values.scaling.http.min }}
+  maxReplicaCount: {{ .Values.scaling.http.max }}
+  cooldownPeriod: {{ .Values.scaling.http.scaledownPeriod }}
+  pollingInterval: 15
+  advanced:
+    restoreToOriginalReplicaCount: true
+  triggers:
+    - type: external-push
+      metadata:
+        httpScaledObject: {{ include "app.name" . }}
+        scalerAddress: {{ .Values.scaling.http.externalScalerAddress | quote }}
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: {{ .Values.scaling.http.cpu.utilization | quote }}
+{{- end }}
 {{- end }}

@@ -47,6 +47,7 @@ type server struct {
 	node     string
 	queueURL string
 	sqs      sender
+	waker    waker   // starts a worker Job right after a message is queued; nil when not configured
 	db       visitor // nil when no database is configured
 	st       store   // the recruitment data, nil when no database is configured
 }
@@ -81,6 +82,7 @@ func main() {
 			os.Exit(1)
 		}
 		s.sqs = sqs.NewFromConfig(cfg)
+		s.waker = newWakerFromEnv()
 	}
 
 	// Assign only when configured: a nil *db.DB stored in an interface would not compare equal to nil.
@@ -247,6 +249,7 @@ func (s *server) jobs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	s.wakeWorker()
 	writeJSON(w, http.StatusAccepted, map[string]any{"enqueued": sent})
 }
 

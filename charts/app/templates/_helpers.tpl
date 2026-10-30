@@ -16,8 +16,8 @@ app.kubernetes.io/name: {{ include "app.name" . }}
 {{/* Validate that scaling.mode is one of the supported values */}}
 {{- define "app.mode" -}}
 {{- $m := .Values.scaling.mode -}}
-{{- if not (has $m (list "none" "hpa" "http" "sqs")) -}}
-{{- fail (printf "scaling.mode must be one of none|hpa|http|sqs, got %q" $m) -}}
+{{- if not (has $m (list "none" "hpa" "http" "sqs" "sqsjob")) -}}
+{{- fail (printf "scaling.mode must be one of none|hpa|http|sqs|sqsjob, got %q" $m) -}}
 {{- end -}}
 {{- $m -}}
 {{- end -}}
@@ -28,6 +28,7 @@ app.kubernetes.io/name: {{ include "app.name" . }}
 {{- if eq $m "hpa" -}}{{ .Values.scaling.hpa.min }}
 {{- else if eq $m "http" -}}{{ .Values.scaling.http.min }}
 {{- else if eq $m "sqs" -}}{{ .Values.scaling.sqs.min }}
+{{- else if eq $m "sqsjob" -}}0
 {{- else -}}{{ .Values.replicas }}
 {{- end -}}
 {{- end -}}

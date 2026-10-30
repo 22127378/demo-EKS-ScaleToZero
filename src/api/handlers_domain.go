@@ -543,6 +543,7 @@ func (s *server) screenApplication(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to queue the screening"})
 			return nil
 		}
+		s.wakeWorker()
 		writeJSON(w, http.StatusAccepted, map[string]any{"applicationId": id, "screeningStatus": "queued"})
 		return nil
 	})(w, r)
