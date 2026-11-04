@@ -3,7 +3,7 @@
 #
 # Usage: scripts/deploy-apps.sh [install|uninstall]      (default: install)
 #
-# Database and queue addresses are read from `terraform output` (local state, no AWS call), or from
+# Database and queue addresses are read from `terraform output` (state in S3), or from
 # QUEUE_URL, DB_ENDPOINT, DB_NAME and DB_SECRET_ARN when set (the CD workflow has no Terraform state).
 # If they are missing the matching features are simply left unconfigured and a note is printed.
 #
@@ -21,6 +21,7 @@ action="${1:-install}"
 region="${AWS_REGION:-ap-southeast-1}"
 ns="${NAMESPACE:-demo}"
 tag="${TAG:-0.5.2}"
+source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [[ "$action" == "uninstall" ]]; then
@@ -53,7 +54,10 @@ deploy() { # name image [extra helm args...]
 }
 
 # Addresses created by Terraform (empty when that part is not deployed).
-outputs="$(terraform -chdir="$root/terraform" output -json 2>/dev/null || echo '{}')"
+outputs='{}'
+if [[ -z "${QUEUE_URL:-}" || -z "${DB_ENDPOINT:-}" ]]; then
+  outputs="$(tf output -json 2>/dev/null || echo '{}')"   # state is in S3, so this needs AWS credentials
+fi
 tfval() { jq -r --arg k "$1" '.[$k].value // empty' <<<"$outputs"; }
 queue_url="${QUEUE_URL:-$(tfval queue_url)}"
 db_endpoint="${DB_ENDPOINT:-$(tfval db_endpoint)}"

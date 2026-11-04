@@ -16,7 +16,9 @@ resource "aws_sqs_queue" "jobs" {
 
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.jobs_dlq.arn
-    maxReceiveCount     = 3
+    # Keep in step with MAX_RECEIVE in the worker (src/worker/main.go): on the last delivery it marks the application
+    # 'failed'. With a 60 s visibility timeout, 8 deliveries ride out a database outage of about 8 minutes.
+    maxReceiveCount = 8
   })
 }
 

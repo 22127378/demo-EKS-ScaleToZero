@@ -26,7 +26,7 @@ say "1/5 Pre-flight checks"
 "$root/scripts/check-prereqs.sh" "$region" || [[ $? -eq 1 ]] || exit 2   # exit 1 = some check failed: show it, let terraform decide
 
 say "2/5 Terraform plan"
-tf init -input=false >/dev/null
+tf init -input=false -backend-config=backend.hcl >/dev/null
 tf plan -input=false -out="$work/tfplan"
 if (( plan_only )); then
   echo "Stopped after the plan (--plan). Nothing was created."

@@ -7,6 +7,12 @@ variable "github_repository" {
   default     = "22127378/demo-EKS-ScaleToZero"
 }
 
+variable "github_oidc_subject_with_ids" {
+  description = "The sub claim GitHub sends when it includes the numeric owner and repository IDs (read it from the failed AssumeRoleWithWebIdentity event in CloudTrail). The name-only form is kept as well."
+  type        = string
+  default     = "repo:22127378@122483062/demo-EKS-ScaleToZero@1430806291:ref:refs/heads/main"
+}
+
 variable "create_github_oidc_provider" {
   description = "Create the GitHub OIDC provider. Set false if the AWS account already has one (only one per URL is allowed)."
   type        = bool
@@ -38,7 +44,10 @@ resource "aws_iam_role" "github_actions" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub" = [
+            "repo:${var.github_repository}:ref:refs/heads/main",
+            var.github_oidc_subject_with_ids,
+          ]
         }
       }
     }]

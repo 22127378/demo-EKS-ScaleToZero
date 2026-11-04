@@ -15,7 +15,8 @@ out=${3:-docs/results/worker/worker-cold-start-warm.csv}
 region=${AWS_REGION:-ap-southeast-1}
 mkdir -p "$(dirname "$out")"
 aws sts get-caller-identity >/dev/null || { echo "AWS session expired: run aws login"; exit 1; }
-q=$(cd terraform && terraform output -raw queue_url)
+source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
+q=$(tf output -raw queue_url)   # state is in S3, tf supplies the credentials
 [ -f "$out" ] || echo "label,run,pod_ready_s,drained_s,nodes_added" > "$out"
 
 for run in $(seq 1 "$runs"); do

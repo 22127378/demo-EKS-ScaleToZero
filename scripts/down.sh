@@ -43,7 +43,7 @@ if (( dry )); then
   echo "Dry run: nothing was deleted. This is what down.sh would do:"
   echo "  1. helm uninstall fe, api, worker (in namespace demo) and wait for the ALB to disappear"
   echo "  2. delete placeholders and NodePools, wait for the Karpenter nodes to terminate, delete the node class"
-  echo "  3. terraform destroy (state: $root/terraform/terraform.tfstate)"
+  echo "  3. terraform destroy (state: s3://demo-tfstate-<account>/demo/terraform.tfstate)"
   echo "  4. list what is left"
   exit 0
 fi
@@ -92,7 +92,7 @@ else
 fi
 
 say "3/4 terraform destroy"
-tf init -input=false >/dev/null
+tf init -input=false -backend-config=backend.hcl >/dev/null
 tf destroy -input=false -auto-approve || { echo "ERROR: terraform destroy failed; fix the error and run this script again." >&2; exit 1; }
 
 # Karpenter creates one instance profile per node class (named <cluster>_<digits>) that Terraform does not know about.
