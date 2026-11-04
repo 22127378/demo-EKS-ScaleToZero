@@ -77,6 +77,12 @@ jobs:
           BUILDER: ${{ steps.buildx.outputs.name }}
         run: scripts/build-images.sh "${{ steps.ecr.outputs.registry }}" --push
 
+      # deploy-apps.sh passes --force-conflicts (Helm 4 server-side apply); the runner's preinstalled Helm may be 3.x.
+      - uses: azure/setup-helm@v4
+        if: steps.cluster.outputs.exists == 'true'
+        with:
+          version: v4.1.3
+
       - name: Upgrade the apps
         if: steps.cluster.outputs.exists == 'true'
         env:
