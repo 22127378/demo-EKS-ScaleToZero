@@ -1,0 +1,104 @@
+# Checks that need no AWS access: tests, build, chart rendering, Terraform validation, image build.
+# Runs on pull requests and pushes, and is called by cd.yml before a deploy.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: src/go.mod
+          cache-dependency-path: src/go.sum
+      - name: Vet
+        working-directory: src
+        run: go vet ./...
+      - name: Test
+        working-directory: src
+        run: go test ./...
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/web/package-lock.json
+      - name: Install
+        working-directory: src/web
+        run: npm ci
+      - name: Type check and build
+        working-directory: src/web
+        run: npm run build
+
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render every app with the same values the deploy script passes
+        run: |
+          set -euo pipefail
+          common=(--set image.repository=example/app --set image.tag=ci --set-string ingress.inboundCidrs=203.0.113.1/32)
+          helm lint charts/app -f apps/api.values.yaml "${common[@]}"
+          helm lint charts/app -f apps/fe.values.yaml "${common[@]}"
+          helm lint charts/app -f apps/worker.values.yaml "${common[@]}" \
+            --set-string scaling.sqsjob.queueURL=https://sqs.ap-southeast-1.amazonaws.com/111111111111/demo-jobs \
+            --set-string scaling.sqsjob.postgres.host=db.example.internal \
+            --set-string scaling.sqsjob.postgres.secretARN=arn:aws:secretsmanager:ap-southeast-1:111111111111:secret:db
+          for app in api fe; do
+            helm template "$app" charts/app -f "apps/$app.values.yaml" "${common[@]}" > /dev/null
+          done
+          helm template worker charts/app -f apps/worker.values.yaml "${common[@]}" \
+            --set-string scaling.sqsjob.queueURL=https://sqs.ap-southeast-1.amazonaws.com/111111111111/demo-jobs \
+            --set-string scaling.sqsjob.postgres.host=db.example.internal \
+            --set-string scaling.sqsjob.postgres.secretARN=arn:aws:secretsmanager:ap-southeast-1:111111111111:secret:db > /dev/null
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Format
+        run: terraform -chdir=terraform fmt -check -recursive
+      - name: Validate (no backend, no credentials)
+        run: |
+          terraform -chdir=terraform init -backend=false -input=false
+          terraform -chdir=terraform validate
+
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: api, dockerfile: src/api/Dockerfile, context: src }
+          - { name: worker, dockerfile: src/worker/Dockerfile, context: src }
+          - { name: web, dockerfile: src/web/Dockerfile, context: src/web }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build demo-${{ matrix.name }} for amd64 and arm64 (not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

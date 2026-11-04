@@ -1,0 +1,99 @@
+# Builds the images, pushes them to ECR and upgrades the apps on the running EKS cluster.
+# Terraform is not applied here: its state is local, see docs of the CI/CD setup.
+#
+# Needs in the repository settings (Settings > Secrets and variables > Actions > Variables):
+#   AWS_ROLE_ARN   role created by terraform/ci.tf (output github_actions_role_arn)
+#   INBOUND_CIDRS  CIDR allowed to reach the ALB, e.g. 203.0.113.7/32 (or 0.0.0.0/0)
+name: cd
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - src/**
+      - charts/**
+      - apps/**
+      - scripts/build-images.sh
+      - scripts/deploy-apps.sh
+      - .github/workflows/cd.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+# One deploy at a time; a newer push waits instead of cancelling a deploy that is half done.
+concurrency:
+  group: cd
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-southeast-1
+  CLUSTER_NAME: demo
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Find the cluster
+        id: cluster
+        run: |
+          if aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.status --output text > status.txt 2>/dev/null \
+             && [ "$(cat status.txt)" = ACTIVE ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Cluster '$CLUSTER_NAME' does not exist or is not ACTIVE; nothing to deploy to."
+          fi
+
+      - name: Set image tag
+        if: steps.cluster.outputs.exists == 'true'
+        run: echo "TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.cluster.outputs.exists == 'true'
+        id: buildx
+
+      - name: Log in to ECR
+        if: steps.cluster.outputs.exists == 'true'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push images
+        if: steps.cluster.outputs.exists == 'true'
+        env:
+          BUILDER: ${{ steps.buildx.outputs.name }}
+        run: scripts/build-images.sh "${{ steps.ecr.outputs.registry }}" --push
+
+      - name: Upgrade the apps
+        if: steps.cluster.outputs.exists == 'true'
+        env:
+          INBOUND_CIDRS: ${{ vars.INBOUND_CIDRS }}
+        run: |
+          set -euo pipefail
+          [ -n "$INBOUND_CIDRS" ] || { echo "::error::Set the INBOUND_CIDRS repository variable"; exit 1; }
+          aws eks update-kubeconfig --name "$CLUSTER_NAME"
+          # No Terraform state here: read the addresses from AWS.
+          QUEUE_URL="$(aws sqs get-queue-url --queue-name demo-jobs --query QueueUrl --output text)"
+          read -r DB_ENDPOINT DB_NAME DB_SECRET_ARN < <(aws rds describe-db-clusters --db-cluster-identifier demo-aurora \
+            --query 'DBClusters[0].[Endpoint,DatabaseName,MasterUserSecret.SecretArn]' --output text)
+          export QUEUE_URL DB_ENDPOINT DB_NAME DB_SECRET_ARN
+          scripts/deploy-apps.sh install
+
+      - name: Show what is running
+        if: steps.cluster.outputs.exists == 'true'
+        run: |
+          kubectl -n demo get pods,scaledjob,httpscaledobject
+          helm -n demo list
