@@ -9,6 +9,28 @@ metadata:
 spec:
   podIdentity:
     provider: aws
+{{- if and .Values.scaling.sqsjob.postgres.enabled .Values.scaling.sqsjob.postgres.host }}
+{{- /* KEDA's operator reads the database password from Secrets Manager with its own IAM role (Pod Identity). */}}
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: {{ include "app.name" . }}-db
+  labels: {{- include "app.labels" . | nindent 4 }}
+spec:
+  awsSecretManager:
+    podIdentity:
+      provider: aws
+    region: {{ .Values.scaling.sqsjob.region | quote }}
+    secrets:
+      - parameter: userName
+        name: {{ required "scaling.sqsjob.postgres.secretARN is required" .Values.scaling.sqsjob.postgres.secretARN | quote }}
+        secretKey: username
+      - parameter: password
+        name: {{ .Values.scaling.sqsjob.postgres.secretARN | quote }}
+        secretKey: password
+{{- end }}
+---
 ---
 apiVersion: keda.sh/v1alpha1
 kind: ScaledJob
@@ -22,6 +44,8 @@ spec:
   successfulJobsHistoryLimit: {{ .Values.scaling.sqsjob.successfulJobsHistoryLimit }}
   failedJobsHistoryLimit: {{ .Values.scaling.sqsjob.failedJobsHistoryLimit }}
   scalingStrategy:
+    # With the SQS and the postgresql trigger both on, the larger of the two answers wins.
+    multipleScalersCalculation: max
     # The SQS scaler counts messages that are already in flight, so the Jobs that hold them must be subtracted
     # ("default"). "accurate" assumes in-flight messages are not counted and would create new Jobs for the same
     # message on every poll until the first Job has picked it up.
@@ -107,4 +131,19 @@ spec:
         awsRegion: {{ .Values.scaling.sqsjob.region | quote }}
         identityOwner: operator
         scaleOnInFlight: {{ .Values.scaling.sqsjob.scaleOnInFlight | quote }}
+{{- if and .Values.scaling.sqsjob.postgres.enabled .Values.scaling.sqsjob.postgres.host }}
+    # Queued screenings counted in the database: always fresh, unlike the SQS queue length, which lags by about
+    # 6 seconds when it is polled every second. The Job still takes its messages from SQS.
+    - type: postgresql
+      authenticationRef:
+        name: {{ include "app.name" . }}-db
+      metadata:
+        host: {{ .Values.scaling.sqsjob.postgres.host | quote }}
+        port: {{ .Values.scaling.sqsjob.postgres.port | quote }}
+        dbName: {{ .Values.scaling.sqsjob.postgres.dbName | quote }}
+        sslmode: {{ .Values.scaling.sqsjob.postgres.sslmode | quote }}
+        query: {{ .Values.scaling.sqsjob.postgres.query | quote }}
+        targetQueryValue: {{ .Values.scaling.sqsjob.messagesPerJob | quote }}
+        activationTargetQueryValue: "0"
+{{- end }}
 {{- end }}

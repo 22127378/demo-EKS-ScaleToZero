@@ -6,7 +6,7 @@ Lệnh giữ nguyên tiếng Anh. Bài tải ở phần 9 **phải bật** `WITH
 **Địa chỉ hệ thống (sau lần deploy này):**
 
 ```
-http://k8s-demo-49ec67e7ad-1895331656.ap-southeast-1.elb.amazonaws.com/
+http://k8s-demo-49ec67e7ad-1506314837.ap-southeast-1.elb.amazonaws.com/
 ```
 
 Địa chỉ ALB **đổi sau mỗi lần dựng lại hạ tầng**. Nếu bạn dựng lại, lấy địa chỉ mới bằng:
@@ -37,7 +37,7 @@ cd /home/tan.le@rikai.technology/Demo-test
 aws login                                  # chỉ khi phiên AWS đã hết hạn
 aws eks update-kubeconfig --region ap-southeast-1 --name demo --kubeconfig /tmp/demo.kubeconfig
 export KUBECONFIG=/tmp/demo.kubeconfig
-export ALB=k8s-demo-49ec67e7ad-1895331656.ap-southeast-1.elb.amazonaws.com
+export ALB=$(kubectl -n demo get ingress fe -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 ```
 
 **Từng lệnh làm gì:**
@@ -45,7 +45,7 @@ export ALB=k8s-demo-49ec67e7ad-1895331656.ap-southeast-1.elb.amazonaws.com
 - `aws login`: đăng nhập AWS; chỉ cần khi phiên cũ hết hạn (lỗi `session has expired`).
 - `aws eks update-kubeconfig ...`: tạo file cấu hình kết nối `kubectl` tới cluster `demo` hiện tại, ghi vào `/tmp/demo.kubeconfig` (không đụng `~/.kube/config`). Cluster được dựng lại thì địa chỉ đổi, nên chạy lại lệnh này.
 - `export KUBECONFIG=...`: bảo `kubectl` trong **terminal này** dùng file vừa tạo. Mỗi terminal phải chạy riêng.
-- `export ALB=...`: lưu địa chỉ ALB vào biến `$ALB` để các lệnh `curl` và `k6` phía sau dùng lại.
+- `export ALB=$(kubectl ...)`: đọc địa chỉ ALB hiện tại từ cụm và lưu vào biến `$ALB` để các lệnh `curl` và `k6` phía sau dùng lại (không cần sửa tay khi dựng lại hạ tầng).
 
 **Terminal 1 (Pod):**
 ```bash
@@ -73,8 +73,8 @@ watch -n 3 "aws sqs get-queue-attributes --region ap-southeast-1 --queue-url $Q 
 **Terminal 4 (Lệnh):** để trống, dùng cho các phần bên dưới.
 
 **Kiểm tra trước giờ G:**
-- [ ] **Trình duyệt:** mở `http://k8s-demo-49ec67e7ad-1895331656.ap-southeast-1.elb.amazonaws.com/` thấy trang Recruitment.
-- [ ] **Terminal 2:** có 4 node: 2 hệ thống, 2 thuộc pool `default` (1 amd64, 1 arm64) đang giữ chỗ trống.
+- [ ] **Trình duyệt:** mở `http://k8s-demo-49ec67e7ad-1506314837.ap-southeast-1.elb.amazonaws.com/` thấy trang Recruitment.
+- [ ] **Terminal 2:** có 5 node: 2 hệ thống, 2 thuộc pool `default` (1 amd64, 1 arm64) đang giữ chỗ trống, 1 thuộc pool `worker` (giữ ấm cho các Job worker).
 - [ ] **Terminal 1:** frontend 1 pod; API và worker **0 pod** (đúng thiết kế).
 - [ ] Docker đang chạy (cần cho bài 200 user bằng k6, ở **Terminal 4**).
 
@@ -82,7 +82,7 @@ watch -n 3 "aws sqs get-queue-attributes --region ap-southeast-1 --queue-url $Q 
 
 **Nói:** Hệ thống gồm API Go (32 endpoint, miền tuyển dụng), frontend React, worker xử lý hàng đợi SQS, ALB phía trước,
 Aurora Serverless v2 làm cơ sở dữ liệu. Chạy trên EKS, **toàn bộ node là spot**, hỗ trợ cả amd64 và arm64.
-Ba tầng co giãn: **Karpenter** (node), **KEDA** (API về 0 pod; worker theo hàng đợi SQS), **HPA** (frontend).
+Ba tầng co giãn: **Karpenter** (node), **KEDA** (API về 0 pod; worker là ScaledJob theo hàng đợi SQS), **HPA** (frontend).
 
 **Chạy ở Terminal 4:**
 ```bash
@@ -93,16 +93,16 @@ kubectl -n kube-system get pods | grep -E "placeholder|prepull"
 - Lệnh 1: liệt kê node kèm pool, kiến trúc và kiểu thuê, để cho thấy toàn bộ là spot và có cả amd64 lẫn arm64.
 - Lệnh 2: tìm các pod `placeholder` (pod giữ chỗ trống dự phòng) và `prepull` (tải sẵn image) trong namespace `kube-system`.
 
-**Người xem thấy:** có sẵn 2 node spot (1 amd64, 1 arm64) với pod giữ chỗ (`placeholder`). Đây là phần **dự phòng chỗ trống**:
+**Người xem thấy:** có sẵn 2 node spot pool `default` (1 amd64, 1 arm64) với pod giữ chỗ (`placeholder`), và 1 node pool `worker` giữ ấm cho worker. Đây là phần **dự phòng chỗ trống**:
 mỗi node còn khoảng 1,28 vCPU trống để pod mới xếp vào ngay, không phải chờ tạo node (tạo node mất 40 đến 50 giây).
 Chỉ sang **Terminal 2** đang hiển thị cùng thông tin.
 
 ## 2. Frontend và API hoạt động (2 phút)
 
-**Chạy ở Trình duyệt:** mở `http://k8s-demo-49ec67e7ad-1895331656.ap-southeast-1.elb.amazonaws.com/`.
+**Chạy ở Trình duyệt:** mở `http://k8s-demo-49ec67e7ad-1506314837.ap-southeast-1.elb.amazonaws.com/`.
 - Trang không tự gọi API khi mở (để API còn ở 0 pod nếu đang rảnh): xem phần 3. Khung trên cùng của trang hiện **thời gian API trả lời cho mỗi thao tác** bạn bấm.
 - Bấm **Add sample data** (nạp dữ liệu mẫu), rồi xem tổng quan, thêm một vị trí và một ứng viên, tạo hồ sơ ứng tuyển. Mỗi nút làm gì: xem [phần "Các nút trên giao diện"](#các-nút-trên-giao-diện) cuối file.
-- Bấm **Score** ở một hồ sơ: việc chấm điểm được đẩy vào hàng đợi SQS; worker bật từ 0 pod rồi ghi điểm về, điểm tự hiện sau vài chục giây (lần đo đầu mất khoảng 56 giây, gồm cả thời gian bật worker).
+- Bấm **Score** ở một hồ sơ: việc chấm điểm được đẩy vào hàng đợi SQS; worker bật từ 0 pod rồi ghi điểm về, điểm tự hiện sau khoảng 10 giây (KEDA phải phát hiện việc, xem TEST_LOG.md bài 3).
 
 **Chạy ở Terminal 4:**
 ```bash
@@ -113,7 +113,7 @@ EXPECT_QUEUE=1 scripts/smoke-api.sh http://$ALB api.demo.local        # gọi m�
 
 `scripts/smoke-api.sh <địa chỉ> <host>`: script gọi lần lượt **mọi route** của API (32 route) và kiểm tra mã trả về cùng các trường chính trong phản hồi. Tham số thứ hai `api.demo.local` là header `Host`, để ALB chuyển request tới API thay vì frontend. In `[ ok ]` hoặc `[FAIL]` cho từng kiểm tra.
 
-**Người xem thấy:** tab Recruitment hiển thị dữ liệu thật từ Aurora; **Terminal 1** cho thấy pod `worker` xuất hiện khi bấm Score;
+**Người xem thấy:** tab Recruitment hiển thị dữ liệu thật từ Aurora; **Terminal 1** cho thấy pod `worker` xuất hiện khi bấm Score (sau khoảng 10 giây);
 smoke test báo đạt (khoảng 41 kiểm tra, 33 đường dẫn). Lần gọi API đầu tiên sau khi API về 0 sẽ chậm hơn một chút (phần 3).
 
 > Lưu ý: smoke test và nút "Add sample data" tạo thêm dữ liệu trong cơ sở dữ liệu demo.
@@ -157,7 +157,7 @@ helm upgrade fe charts/app -n demo --reuse-values --set scaling.hpa.scaleDownSta
 ```
 - `helm upgrade <tên> charts/app`: cập nhật bản cài đặt đang chạy bằng chart chung.
 - `--reuse-values`: giữ nguyên mọi cấu hình cũ, chỉ đổi giá trị ghi sau `--set`. **Quan trọng:** đừng dùng `scripts/deploy-apps.sh` ở đây, vì nó đặt lại frontend về image cũ.
-- `scaledownPeriod`: số giây API không có request thì về 0 pod. `cooldownPeriod`: số giây hàng đợi rỗng thì worker về 0. `scaleDownStabilizationSeconds`: số giây HPA chờ trước khi giảm pod frontend.
+- `scaledownPeriod`: số giây API không có request thì về 0 pod. `cooldownPeriod`: số giây hàng đợi rỗng thì worker về 0 (áp dụng cho chế độ ScaledObject; ScaledJob tự kết thúc Job). `scaleDownStabilizationSeconds`: số giây HPA chờ trước khi giảm pod frontend.
 - `--force-conflicts` (chỉ ở `api`): cho phép Helm ghi đè trường mà KEDA cũng sửa; thiếu nó Helm báo xung đột.
 Nói rõ với khán giả là đã hạ thời gian chờ để demo cho nhanh.
 
@@ -217,7 +217,7 @@ kubectl -n karpenter logs -l app.kubernetes.io/name=karpenter --tail=-1 \
 
 ## 5. KEDA với SQS: worker từ 0 lên 20 (3 phút)
 
-**Nói:** worker mặc định 0 pod. Có message trong hàng đợi thì KEDA bật worker, tối đa 20, mỗi Job xử lý tối đa 10 message.
+**Nói:** worker mặc định **0 pod**. Có message trong hàng đợi thì KEDA tạo các Job (ScaledJob), tối đa 20 Job cùng lúc, mỗi Job xử lý tối đa 10 message rồi kết thúc.
 
 **Chạy ở Terminal 4** (nhìn Terminal 1, 2, 3 trong lúc chạy):
 ```bash
@@ -226,10 +226,11 @@ kubectl -n demo get pods -l app.kubernetes.io/name=worker -w
 ```
 
 - Vòng `for ... curl -XPOST .../jobs -d '{"count":100}'`: gọi `POST /jobs` 5 lần; mỗi lần API đẩy 100 message vào hàng đợi SQS (100 là mức tối đa một lần). Tổng **500 message**. `-XPOST` là phương thức POST, `-d` là nội dung gửi, `echo` xuống dòng để dễ đọc.
-- `kubectl get pods -l ... worker -w`: theo dõi riêng các pod `worker`; `-w` (watch) in thêm một dòng mỗi khi pod đổi trạng thái. Nhiều dòng là bình thường (16 đến 20 pod, mỗi pod đổi trạng thái vài lần). Muốn gọn, dùng lệnh đếm theo trạng thái: `watch -n 2 'kubectl -n demo get pods -l app.kubernetes.io/name=worker --no-headers | awk "{print \$3}" | sort | uniq -c'`.
+- `kubectl get pods -l ... worker -w`: theo dõi riêng các pod `worker`; `-w` (watch) in thêm một dòng mỗi khi pod đổi trạng thái. Nhiều dòng là bình thường (16 đến 20 pod, mỗi pod đổi trạng thái vài lần, pod xong thì `Completed`). Muốn gọn, dùng lệnh đếm theo trạng thái: `watch -n 2 'kubectl -n demo get pods -l app.kubernetes.io/name=worker --no-headers | awk "{print \$3}" | sort | uniq -c'`.
 
-**Người xem thấy:** **Terminal 3** hiển thị hàng đợi vọt lên 500 rồi về 0; **Terminal 1** cho thấy worker đi từ 0 lên 20 pod;
-**Terminal 2** cho thấy Karpenter tạo thêm node `worker` (khoảng 3 node); sau đó hết việc, worker về 0 (khoảng 2,5 phút kể từ lúc gửi).
+**Người xem thấy:** **Terminal 3** hiển thị hàng đợi vọt lên 500 rồi về 0 (đo được khoảng 75 giây); **Terminal 1** cho thấy worker đi từ 0 lên 20 pod rồi hoàn tất (`Completed`);
+**Terminal 2** thường không thêm node vì node `worker` có sẵn đủ chỗ cho 20 pod (đã đo); sau khi hết việc, các pod worker biến mất dần (khoảng 1 phút 40 giây kể từ lúc gửi).
+**Cold start worker:** bấm Score khi worker đang 0 pod thì điểm hiện sau khoảng 10 giây (KEDA phải phát hiện việc, xem TEST_LOG.md bài 3); không dưới 3 giây.
 
 **Kiểm tra không mất message, chạy ở Terminal 4** (hàng đợi lỗi phải bằng 0):
 ```bash
@@ -249,7 +250,7 @@ của API tốn CPU có chủ đích (endpoint `/burn`).
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 kubectl create namespace hpa-demo
 helm upgrade --install hpa-demo charts/app -n hpa-demo \
-  --set image.repository=$ACCOUNT.dkr.ecr.ap-southeast-1.amazonaws.com/demo-api --set image.tag=0.3.0 --set arch=auto \
+  --set image.repository=$ACCOUNT.dkr.ecr.ap-southeast-1.amazonaws.com/demo-api --set image.tag=0.5.2 --set arch=auto \
   --set containerPort=8080 --set probe.httpPath=/healthz --set probe.startup.enabled=false \
   --set scaling.mode=hpa --set scaling.hpa.min=1 --set scaling.hpa.max=3 --set scaling.hpa.cpu=50 \
   --set scaling.hpa.scaleDownStabilizationSeconds=60 --set ingress.enabled=false \
@@ -319,9 +320,9 @@ scripts/spot-loss-test.sh
 - Script chọn node đang chạy pod frontend, lấy mã instance, rồi chạy nền hai vòng `curl` mỗi 0,5 giây: một vào frontend `/`, một vào API `/healthz`.
 - Sau 5 giây chạy `aws ec2 terminate-instances` lên instance đó (mất máy đột ngột, không có cảnh báo 2 phút của spot).
 - Mỗi 3 giây ghi số node Ready, pod frontend, pod API, pod giữ chỗ; dừng khi cụm hồi phục 3 lần liên tiếp (tối đa 4 phút), rồi lưu nhật ký Karpenter.
-- Kết quả lưu ở `docs/evidence/spot-loss/`; `summary.txt` đếm số request không trả HTTP 200 theo từng đường.
+- Kết quả lưu ở `docs/results/spot-loss/` (mặc định script ghi `probe.csv`, `timeline.csv`, `summary.txt`...); `summary.txt` đếm số request không trả HTTP 200 theo từng đường. Bản đã đo được gom lại thành `spot-loss-probe.csv`, `spot-loss-timeline.csv`, `spot-loss-summary.txt`.
 
-**Số đo:** xem TEST_LOG.md bài 9 (`docs/evidence/spot-loss/`) sau khi đo.
+**Số đo:** xem TEST_LOG.md bài 9 (`docs/results/spot-loss/`) sau khi đo.
 
 **Người xem thấy:** **Terminal 2** node mất đi rồi Karpenter tạo node thay; **Terminal 1** pod frontend chạy lại ở node khác.
 Frontend chỉ có 1 pod nên **có thể có một khoảng ngắn ALB trả lỗi 502/503** trước khi pod mới sẵn sàng; hãy đọc `summary.txt` và
@@ -362,6 +363,42 @@ aws cloudwatch get-metric-statistics --region ap-southeast-1 --namespace AWS/RDS
 **Người xem thấy:** **Terminal 1** cho thấy API lên 2 pod sau khoảng 15 giây (xem số pod đo được ở TEST_LOG.md bài 7), frontend có thể lên 2 pod; kết quả k6 ở **Terminal 4** cuối bài có
 `http_req_failed` và p95 để đối chiếu với TEST_LOG.md.
 
+## 9b. Stress test Aurora (tuỳ chọn, 10 đến 12 phút, ghi dữ liệu thật vào database)
+
+**Nói:** bài 9 chỉ chạm gần trần 2 ACU. Bài này tăng tải **từng bậc** (100, 200, 300, 400, 500 request/giây, mỗi bậc 2 phút) và trộn các endpoint tốn database nhất, để tìm điểm database hoặc API bắt đầu không theo kịp.
+Đã đo trước: `POST /applicants` tốn 77% CPU database ở 200 request/giây, `/db` 58%, tìm kiếm `/applicants` 55%, `/positions` 30% (`docs/results/aurora/aurora-per-endpoint.csv`).
+
+**Chuẩn bị:** gọi API một lần cho nó thức (`curl -H "Host: api.demo.local" http://$ALB/healthz`), và giữ Terminal 1 đang theo dõi pod.
+
+**Theo dõi Aurora, chạy ở một terminal phụ** (CloudWatch mỗi phút một điểm, trễ khoảng 1 phút):
+```bash
+watch -n 30 'for m in ServerlessDatabaseCapacity CPUUtilization DatabaseConnections; do echo "== $m"; aws cloudwatch get-metric-statistics --region ap-southeast-1 --namespace AWS/RDS --metric-name $m --dimensions Name=DBClusterIdentifier,Value=demo-aurora --start-time $(date -u -d "-8 minutes" +%FT%TZ) --end-time $(date -u +%FT%TZ) --period 60 --statistics Maximum --query "sort_by(Datapoints,&Timestamp)[].[Timestamp,Maximum]" --output text; done'
+```
+
+**Chạy ở Terminal 4:**
+```bash
+docker run --rm --network host -v "$PWD/scripts:/s:ro" grafana/k6 run -e ALB=$ALB /s/stress-aurora.js
+```
+
+- Mặc định 5 bậc, mỗi bậc 120 giây; chỉnh bằng `-e START=100 -e STEP=100 -e STEPS=5 -e STEP_SECONDS=120`. `-e WRITE_SHARE=0.5` là nửa số yêu cầu ghi (đổi lên 0.8 để nặng hơn).
+- Bài này dùng tốc độ cố định (`ramping-arrival-rate`), nên k6 giữ đúng số request mỗi giây dù server chậm đi; thấy `dropped_iterations` trong kết quả nghĩa là k6 không đủ người dùng ảo hoặc hệ thống đã không đáp ứng kịp.
+
+**Đọc kết quả:**
+- **ACU chạm 2,0 và CPU database trên 90%** ở bậc nào: đó là trần của database (đã thấy chạm trần ở 200 user).
+- **p95 trên 1 giây hoặc lỗi 5xx** ở bậc nào: hệ thống không theo kịp. Phân biệt: nếu CPU database còn thấp mà lỗi tăng thì nghẽn ở **API** (tối đa 2 pod, xem Terminal 1), nếu CPU database đã sát trần thì nghẽn ở **Aurora**.
+- **Số kết nối** ổn định 20 (pool của 2 pod API) cho thấy database không bị cạn kết nối.
+
+**Dọn dữ liệu sau bài (chạy ở Terminal 4):** bài này tạo hàng chục nghìn ứng viên tên "Stress Test" (e-mail kết thúc `@stress.test`). Xoá bằng một pod `psql` tạm, mật khẩu đi qua stdin, không in ra:
+```bash
+ARN=$(kubectl -n demo get deploy api -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="DB_SECRET_ARN")].value}')
+HOST=$(kubectl -n demo get deploy api -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="DB_HOST")].value}')
+SEC=$(aws secretsmanager get-secret-value --region ap-southeast-1 --secret-id "$ARN" --query SecretString --output text)
+U=$(echo "$SEC" | python3 -c 'import sys,json;print(json.load(sys.stdin)["username"])'); P=$(echo "$SEC" | python3 -c 'import sys,json;print(json.load(sys.stdin)["password"])')
+{ echo "$P"; echo "DELETE FROM applicants WHERE email LIKE '%@stress.test';"; } | kubectl -n demo run psql-clean --rm -i --restart=Never --image=postgres:16-alpine --command -- sh -c "read PGPASSWORD; export PGPASSWORD; PGSSLMODE=require psql -h $HOST -U $U -d demo"
+unset P SEC
+```
+`ON DELETE CASCADE` xoá luôn các hồ sơ ứng tuyển của họ. Câu lệnh chỉ xoá đúng các dòng có e-mail `@stress.test`.
+
 ## 10. Tổng kết (1 phút)
 
 | Yêu cầu | Trạng thái |
@@ -369,6 +406,7 @@ aws cloudwatch get-metric-statistics --region ap-southeast-1 --namespace AWS/RDS
 | API Go 32 endpoint, frontend React, ALB | Đạt |
 | Ba tầng co giãn (Karpenter, KEDA với SQS, HPA) | Đạt, có bằng chứng |
 | API scale to zero, cold start dưới 3 giây | Xem TEST_LOG.md bài 1 và 2 |
+| Worker bắt đầu xử lý dưới 3 giây | **Chưa đạt** với ScaledJob (trung vị 10 giây trở lên); worker nóng đạt nhưng không chọn (TEST_LOG.md bài 3) |
 | 200 user cùng lúc | Đạt, database gần hết dư địa |
 | Toàn bộ node spot, amd64 và arm64 | Đạt |
 | Chart dùng được với image bất kỳ | Đạt với dịch vụ HTTP (phần 7) |
@@ -379,6 +417,7 @@ aws cloudwatch get-metric-statistics --region ap-southeast-1 --namespace AWS/RDS
 ## 11. Câu hỏi hay gặp
 
 - **"Sao không luôn giữ 1 pod API cho nhanh?"** Yêu cầu là scale to zero. Đặt `min: 1` sẽ hết cold start nhưng mất tính tiết kiệm.
+- **"Sao worker cold start 10 giây?"** KEDA đọc số đếm hàng đợi SQS, mà số đếm này bị cũ vài giây khi bị hỏi dày (đã đo, TEST_LOG.md bài 3). Pod khởi động chỉ khoảng 0,4 giây. Muốn dưới 3 giây thì giữ 1 worker nóng (0,39 giây) hoặc dùng Lambda; đổi lại tốn một pod chạy liên tục hoặc gắn chặt AWS.
 - **"Spot bị thu hồi thì sao?"** Xem phần 8. Số đo: xem TEST_LOG.md bài 9. Chưa thử mất cả hai node hệ thống cùng lúc.
 - **"Route 53 đâu?"** Chưa có tên miền; hiện dùng DNS của ALB. Có tên miền thì gắn chỉ mất một bước Terraform.
 - **"Sao cold start 2 đến 3 giây?"** Khoảng 1 giây là pod khởi động, phần còn lại là KEDA phát hiện request, interceptor chuyển tiếp và mạng.
@@ -410,12 +449,12 @@ Sau khi huỷ, 3 terminal theo dõi sẽ báo lỗi kết nối; bấm Ctrl+C đ
 | **Add applicant** | Thêm ứng viên từ Name, Email (bắt buộc) và Skills (tuỳ chọn, cách nhau dấu phẩy). |
 | **Apply** | Tạo hồ sơ nối một ứng viên với một vị trí đang mở. Hồ sơ mới ở trạng thái `applied`. |
 | Ô chọn trạng thái (mỗi hồ sơ) | Đổi trạng thái hồ sơ theo quy trình hợp lệ (`applied` sang `screening`, `interview`, `offer`, `hired`; `rejected` hoặc `withdrawn` bất cứ lúc nào trước bước cuối). Chọn bước nhảy không hợp lệ thì API từ chối và trang hiện lỗi đỏ. |
-| **Score** | Đẩy việc chấm điểm sàng lọc vào hàng đợi SQS. Worker bật từ 0 pod, ghi điểm về sau vài chục giây. Điểm là giả lập (công thức cố định theo mã hồ sơ). |
+| **Score** | Đẩy việc chấm điểm sàng lọc vào hàng đợi SQS. Worker bật từ 0 pod, ghi điểm về sau khoảng 10 giây. Điểm là giả lập (công thức cố định theo mã hồ sơ). |
 | **Delete** (vị trí, ứng viên, hồ sơ) | Xoá bản ghi sau khi xác nhận. Xoá vị trí hoặc ứng viên cũng xoá các hồ sơ liên quan. |
 
 Đầu trang có **hai khung đo thời gian riêng**:
 - **API response time** (bên trái): thời gian API trả lời mỗi thao tác, kèm nhãn Cold start hoặc Warm.
-- **Worker scoring time** (bên phải): bấm Score thì đồng hồ chạy từ lúc bấm đến lúc điểm xuất hiện (chờ hàng đợi, khởi động worker nếu đang 0 pod, chấm điểm). Không gồm lời gọi API.
+- **Worker scoring time** (bên phải): bấm Score thì đồng hồ chạy từ lúc bấm đến lúc điểm xuất hiện (chờ hàng đợi, chấm điểm). Không gồm lời gọi API.
 
 Mọi thao tác đều ghi vào bảng **Activity** ở cuối trang, cột **Source** cho biết là `API (cold start)`, `API (warm)` hay `Worker`.
 

@@ -3,7 +3,7 @@
 # The image repository and the queue URL are set by scripts/deploy-apps.sh.
 image:
   repository: demo-worker
-  tag: 0.4.1
+  tag: 0.5.2
 arch: auto
 nodePool: worker            # own pool + own placeholder: warm node for Jobs, and bursts stay off the API/FE nodes
 serviceAccountName: worker   # bound to an IAM role by Terraform (receive/delete on the queue)
@@ -22,3 +22,5 @@ scaling:
     region: ap-southeast-1
     messagesPerJob: 10
     max: 20
+    postgres:
+      enabled: true          # host and secretARN come from scripts/deploy-apps.sh

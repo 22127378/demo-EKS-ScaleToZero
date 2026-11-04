@@ -5,13 +5,13 @@
 # Usage: scripts/worker-cold-start.sh <label> [runs] [out_csv]
 #   label    free text stored in the CSV (e.g. "default-pool-poll1")
 #   runs     number of runs (default 5)
-#   out_csv  default docs/evidence/worker-cold-start/results.csv
+#   out_csv  default docs/results/worker/worker-cold-start-warm.csv
 # Needs: KUBECONFIG for the demo cluster, AWS credentials (aws sts get-caller-identity must work), bc.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 label=${1:?usage: worker-cold-start.sh <label> [runs] [out_csv]}
 runs=${2:-5}
-out=${3:-docs/evidence/worker-cold-start/results.csv}
+out=${3:-docs/results/worker/worker-cold-start-warm.csv}
 region=${AWS_REGION:-ap-southeast-1}
 mkdir -p "$(dirname "$out")"
 aws sts get-caller-identity >/dev/null || { echo "AWS session expired: run aws login"; exit 1; }

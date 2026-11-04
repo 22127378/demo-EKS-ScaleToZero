@@ -2,11 +2,11 @@
 # Spot loss test: hard-terminate the EC2 instance that runs the frontend pod (as if AWS reclaimed it
 # with no warning) while requests are sent through the ALB. Records what the user would see.
 #
-# Usage: scripts/spot-loss-test.sh [out_dir]      (default: docs/evidence/spot-loss)
+# Usage: scripts/spot-loss-test.sh [out_dir]      (default: docs/results/spot-loss)
 # Needs: KUBECONFIG pointing at the demo cluster, AWS credentials, curl.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-OUT=${1:-docs/evidence/spot-loss}
+OUT=${1:-docs/results/spot-loss}
 REGION=${AWS_REGION:-ap-southeast-1}   # the CLI default region may differ from the cluster region
 mkdir -p "$OUT"
 

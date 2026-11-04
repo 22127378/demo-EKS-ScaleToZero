@@ -1,6 +1,6 @@
 # Báo cáo: Co giãn tự động trên EKS spot
 
-Hệ thống tuyển dụng nhỏ chạy trên AWS EKS, dùng toàn bộ node spot. API về 0 pod khi không dùng, worker chạy theo hàng đợi SQS, node tăng giảm theo nhu cầu.
+Hệ thống tuyển dụng nhỏ chạy trên AWS EKS, dùng toàn bộ node spot. API về 0 pod khi không dùng, worker chạy theo hàng đợi SQS bằng KEDA ScaledJob, node tăng giảm theo nhu cầu.
 
 **Toàn bộ số đo cũ đã được xoá để đo lại từ đầu.** Các mục kết quả bên dưới để trống (`chưa đo`) cho đến khi có số đo mới trong [TEST_LOG.md](TEST_LOG.md). Phần mô tả hệ thống và cấu hình (mục 2 đến 5) là cấu hình đang chạy, không phải kết quả đo.
 
@@ -10,14 +10,16 @@ Hệ thống tuyển dụng nhỏ chạy trên AWS EKS, dùng toàn bộ node sp
 |---|---|
 | API Go từ 20 đến 50 endpoint, giao diện React | Có 32 endpoint miền tuyển dụng và `/slow` (33 route) |
 | ALB phía trước, chạy trên EKS | Một ALB chung cho API và frontend |
-| Toàn bộ node là spot, có cả amd64 và arm64 | Cấu hình đã đặt; kết quả chưa đo lại |
-| Ba tầng co giãn: Karpenter, KEDA với SQS, HPA | Cấu hình đã đặt; kết quả chưa đo lại |
-| API scale to zero, cold start dưới 3 giây | Chưa đo lại |
-| Chịu được 200 user cùng lúc | Chưa đo lại |
-| Aurora Serverless v2, 0,5 đến 2 ACU, không tạm dừng | Cấu hình đã đặt; ACU chưa đo lại |
-| Chart Helm dùng được với image bất kỳ | Chưa đo lại |
-| Số pod tối đa: API 2, frontend 2 | Cấu hình đã đặt; chưa đo lại |
-| Chịu mất node spot | Chưa đo lại |
+| Toàn bộ node là spot, có cả amd64 và arm64 | Đạt: API và frontend chạy trên arm64 (bài 11); node spot cả hai kiến trúc (bài 4) |
+| Ba tầng co giãn: Karpenter, KEDA với SQS, HPA | Đạt: node 2→4→2 (bài 4); HPA 1→3→1 (bài 5); worker 1→20→1 (bài 6) |
+| API scale to zero, cold start dưới 3 giây | Đạt: API về 0 sau 5 phút; cold start 1,79 giây (bài 1); 20/20 lượt dưới 3 giây phía hệ thống (bài 2) |
+| Worker bắt đầu xử lý dưới 3 giây | **Đạt khi thêm trigger PostgreSQL và KEDA hỏi mỗi 1 giây:** trung vị `server_s` 1,66 giây, 20/20 dưới 3 giây (bài 3). ScaledJob chỉ dùng SQS không đạt (trung vị 10 giây trở lên); worker nóng đạt (0,39 giây) nhưng không chọn |
+| Chịu được 200 user cùng lúc | Đạt: 0 lỗi trên 68.854 request, API và frontend tối đa 2 pod (bài 7) |
+| Aurora Serverless v2, 0,5 đến 2 ACU, không tạm dừng | Đạt: ACU 0,5 → đỉnh 2,0 (bài 8); hết dư địa ở 200 user |
+| API thêm pod theo CPU (KEDA HTTP + trigger CPU) | Đạt: 10 user đốt CPU làm API lên 2 pod sau khoảng 21 giây (bài 5b) |
+| Chart Helm dùng được với image bất kỳ | Đạt: 3 image HTTP, đối chứng sai kiến trúc đúng như mong đợi (bài 10) |
+| Số pod tối đa: API 2, frontend 2 | Đạt (bài 7) |
+| Chịu mất node spot | Đạt một phần: frontend lỗi 5/151 request trong khoảng 6 giây, API 0 lỗi (bài 9) |
 | Route 53 | **Chưa làm** (chưa có tên miền) |
 
 ## 2. Kiến trúc
@@ -28,7 +30,7 @@ Người dùng
    ALB  ──(Host: api.demo.local)──►  Interceptor KEDA ──► API (0 đến 2 pod) ──► Aurora Serverless v2
     |                                                          |
     └──────────────────────────────► Frontend nginx (1 đến 2 pod)
-                                                               └──► SQS ──► Worker (0 đến 20 pod)
+                                                               └──► SQS ──► Worker (KEDA ScaledJob: 0 đến 20 Job)
 ```
 
 - **Ứng dụng:** API Go, frontend React phục vụ bằng nginx, worker Go chấm điểm hồ sơ.
@@ -76,15 +78,15 @@ Karpenter 1.14.1, gom node thừa sau 1 phút (`consolidateAfter`).
 | Node | Karpenter | mọi pod không còn chỗ chạy | pod chưa xếp được | `default` 16 vCPU | |
 | Pod | KEDA HTTP Add-on | API | request đồng thời, mục tiêu 100 mỗi pod | 0 đến 2 pod | `scaledownPeriod` mặc định 300 giây, **đang đặt 10 giây** cho demo |
 | Pod | HPA | Frontend | CPU 50% so với mức pod xin | 1 đến 2 pod | cửa sổ ổn định khi giảm 300 giây |
-| Pod | KEDA ScaledJob với SQS | Worker | độ dài hàng đợi: mỗi Kubernetes Job lấy tối đa 10 message rồi kết thúc | 0 đến 20 Job chạy cùng lúc | `pollingInterval` **1 giây**, `cooldownPeriod` **10 giây** (mặc định 5 và 60), startup probe tắt, chạy ở pool `default` |
+| Pod | KEDA ScaledJob với SQS | Worker | độ dài hàng đợi: mỗi Kubernetes Job lấy tối đa 10 message rồi kết thúc | 0 đến 20 Job chạy cùng lúc | `pollingInterval` 1 giây, `activeDeadlineSeconds` 300, chạy ở pool `worker` riêng (4 vCPU, có pod giữ chỗ riêng) |
 
 **Cơ sở dữ liệu:** Aurora Serverless v2, 0,5 đến 2 ACU, không tạm dừng. **Hàng đợi:** SQS `demo-jobs`, thời gian ẩn message 60 giây, tối đa 3 lần nhận trước khi vào DLQ.
 
-**Giá trị demo cần trả lại:** API `scaledownPeriod` về 300, worker `cooldownPeriod` về 60 (và `pollingInterval` về 5 nếu muốn như cũ), frontend giữ 300. Thời gian chờ 10 giây làm pod worker bị tắt trước khi kịp chạy nếu bấm Score liên tiếp.
+**Giá trị demo cần trả lại:** API `scaledownPeriod` về 300 nếu đã hạ xuống cho demo nhanh; worker giữ `pollingInterval` 1 giây, frontend giữ 300.
 
 ### 4.1 Tài nguyên từng dịch vụ
 
-Chụp trên cụm đang chạy, lúc API và worker ở 0 pod (dữ liệu thô: `docs/evidence/resource-usage/`). "Xin" là mức Kubernetes giữ chỗ cho pod; "dùng thực" là mức đang dùng (`kubectl top`), chỉ là một lần chụp, không phải trung bình.
+Chụp trên cụm đang chạy, lúc API và worker ở 0 pod (số liệu này chưa lưu lại trong kho mã). "Xin" là mức Kubernetes giữ chỗ cho pod; "dùng thực" là mức đang dùng (`kubectl top`), chỉ là một lần chụp, không phải trung bình.
 
 | Dịch vụ | Số pod | CPU xin | RAM xin | CPU dùng thực | RAM dùng thực |
 |---|---|---|---|---|---|
@@ -142,7 +144,7 @@ Subnet vẫn còn khoảng 4.000 địa chỉ trống mỗi vùng, nên **không
 | `t3.medium` | 3 | 6 | 15 | 17 |
 | `c6g.large` | 3 | 10 | 27 | 29 |
 
-Node giữ sẵn một "kho" IP trống (`WARM_IP_TARGET`, hiện 10; `MINIMUM_IP_TARGET`, hiện 12). Pod mới lấy IP từ kho ngay lập tức. Khi kho cạn (ví dụ dồn nhiều Job worker cùng lúc), node phải gọi API của EC2 để xin thêm IP, mất vài giây; trong lúc đó pod không có mạng và Kubernetes thử lại sau khoảng 10 giây, nên pod chờ 11 đến 40 giây (lỗi `failed to assign an IP address to container`). Biện pháp đã làm: tăng kho IP dự phòng (3 lên 10) và cho mỗi Job lấy 10 message thay vì 5 để tạo ít pod hơn. Cách còn lại: dùng node lớn hơn (nhiều IP hơn) hoặc bật prefix delegation.
+Node giữ sẵn một "kho" IP trống (`WARM_IP_TARGET`, hiện 10; `MINIMUM_IP_TARGET`, hiện 12). Pod mới lấy IP từ kho ngay lập tức. Khi kho cạn (ví dụ dồn nhiều pod worker cùng lúc), node phải gọi API của EC2 để xin thêm IP, mất vài giây; trong lúc đó pod không có mạng và Kubernetes thử lại sau khoảng 10 giây, nên pod chờ 11 đến 40 giây (lỗi `failed to assign an IP address to container`). Biện pháp đã làm: tăng kho IP dự phòng (3 lên 10) và cho mỗi Job lấy 10 message thay vì 5 để tạo ít pod hơn. Cách còn lại: dùng node lớn hơn (nhiều IP hơn) hoặc bật prefix delegation.
 
 ## 5. Giảm thời gian chờ: chỗ trống dự phòng (over-provisioning)
 
@@ -154,27 +156,27 @@ Tạo một node mới mất thời gian đáng kể, nên hệ thống giữ s�
 - **Bỏ startup probe của API và worker.**
 - **VPC CNI `WARM_IP_TARGET=3`:** node giữ sẵn địa chỉ IP.
 - **Interceptor của KEDA giữ request** trong lúc API bật từ 0 lên 1, nên người dùng chỉ thấy chậm hơn chứ không nhận lỗi.
-- **Worker chạy ở pool `default`** để dùng chung chỗ trống (đánh đổi: tranh chỗ với API và frontend).
+- **Aurora hết dư địa ở 200 user:** ACU chạm trần 2,0 và CPU đỉnh khoảng 95% (không lỗi). Thêm tải ghi sẽ cần tăng ACU tối đa.
 
 **Cái giá:** hai node dự phòng chạy liên tục kể cả khi không ai dùng. Cùng hai node hệ thống, lúc nhàn rỗi luôn có 4 node, đều là spot.
 
 ## 6. Kết quả đo
 
-Chưa đo lại. Mỗi bài có mục đích, cách test, phạm vi không chứng minh và bảng kết quả trống trong [TEST_LOG.md](TEST_LOG.md):
+Chi tiết từng bài (mục đích, cách test, phạm vi không chứng minh, dữ liệu thô) nằm trong [TEST_LOG.md](TEST_LOG.md). Đo ngày 30/10 và 2/11/2026.
 
-| Bài | Nội dung | Trạng thái |
+| Bài | Nội dung | Kết quả chính |
 |---|---|---|
-| 1 | API scale to zero | chưa đo |
-| 2 | Cold start API (mục tiêu dưới 3 giây) | chưa đo |
-| 3 | Cold start worker | chưa đo |
-| 4 | Karpenter thêm và bớt node | chưa đo |
-| 5 | HPA | chưa đo |
-| 6 | KEDA với SQS (worker 0 đến 20) | chưa đo |
-| 7 | 200 user cùng lúc, API và frontend tối đa 2 pod | chưa đo |
-| 8 | Aurora ACU (0,5 đến 2) | chưa đo |
-| 9 | Mất một node spot | chưa đo |
-| 10 | Chart Helm với image bất kỳ | chưa đo |
-| 11 | Kiến trúc arm64 | chưa đo |
+| 1 | API scale to zero | cold start 1,79 giây; về 0 pod sau khoảng 5 phút 1 giây |
+| 2 | Cold start API | 20 lượt: phía hệ thống 20/20 dưới 3 giây, trung vị 2,08 giây; đầu-cuối 17/20 (3 lượt chậm do mạng máy đo) |
+| 3 | Cold start worker (ScaledJob) | trung vị `server_s` 10,2 giây (hỏi mỗi 1 giây), 17,4 / 12,2 giây ở chu kỳ 10 / 30 giây (số 30 giây có thể bị khoá pha với script đo); 0 lượt dưới 3 giây; mỗi Score tạo 1 đến 3 Job. Worker nóng (không chọn): 0,39 giây |
+| 4 | Karpenter | node `default` 2 → 4 → 2; 5 pod sẵn sàng sau 37 giây; dọn node sau 126 giây |
+| 5 | HPA; API với trigger CPU | HPA 1 → 2 → 3 → 1 pod; API (KEDA HTTP + CPU) 1 → 2 pod sau 21 giây |
+| 6 | KEDA với SQS | 500 message xử lý hết sau 75 giây; worker 0 → 20 → 0 Job; DLQ 0; 0/76 lỗi frontend/API |
+| 7 | 200 user cùng lúc | 68.854 request, 0 lỗi, p95 nhẹ 175 ms (sau tối ưu); API và frontend tối đa 2 pod |
+| 8 | Aurora ACU | 0,5 → 2,0 ACU, CPU đỉnh 93 đến 95%; endpoint ghi và danh sách ứng viên tốn nhất |
+| 9 | Mất một node spot | frontend 5/151 request lỗi trong khoảng 6 giây; API 0 lỗi; cụm đủ node sau khoảng 2 phút |
+| 10 | Chart Helm với image bất kỳ | nginx, http-echo, hello-app đều 200; đối chứng sai kiến trúc không chạy |
+| 11 | Kiến trúc arm64 | API, frontend và worker đều chạy được trên node arm64 |
 
 ## 7. Chi phí và vận hành
 
@@ -187,8 +189,9 @@ Chưa đo lại. Mỗi bài có mục đích, cách test, phạm vi không chứ
 
 - **Route 53 chưa làm:** chưa có tên miền; dùng DNS của ALB, chỉ HTTP, ALB mở cho cả internet.
 - **Frontend và API chỉ có 1 pod nền,** nên mất node là gián đoạn ngắn.
-- **Số Job thừa của ScaledJob: một message sinh ra khoảng 3 Job (2 Job thừa thoát ngay vì hàng đợi đã rỗng); đã thử các chiến lược `accurate` (8 và 6 Job) và `default` (3 Job), chưa triệt hẳn. Vụ 3 pod worker mỗi lần Score trước đó:** cần theo dõi một lần bấm Score khi worker đang 0 pod.
-- **Worker chạy ở pool `default`** cần bài hồi quy 500 message đầy đủ, vì chung chỗ với API và frontend.
+- **Cold start worker không đạt dưới 3 giây với ScaledJob** (trung vị 10 giây trở lên): KEDA đọc số đếm hàng đợi SQS bị cũ vài giây. Mỗi Score còn tạo 1 đến 3 Job, trong đó có Job rỗng; chu kỳ hỏi dài hơn giảm Job dư nhưng làm chậm hơn. Worker nóng (1 pod luôn chạy) đạt 0,39 giây nhưng đã không chọn.
+- **Đợt dồn nhiều Job** có thể hết IP của node, pod khởi động chậm 11 đến 40 giây (giảm còn khoảng 10% pod chậm bằng kho IP lớn hơn).
+- **Aurora hết dư địa ở 200 user:** ACU chạm trần 2,0 và CPU đỉnh khoảng 95% (không lỗi). Thêm tải ghi sẽ cần tăng ACU tối đa.
 - **"Image bất kỳ"** nghĩa là một dịch vụ HTTP bình thường; chưa thử volume, TCP, gRPC, registry riêng, non-root.
 - **Worker** chỉ giả lập công việc (chấm điểm), không phải khối lượng xử lý nặng thật.
 - **Spot:** chưa thử mất cả hai node hệ thống cùng lúc.
@@ -198,5 +201,5 @@ Chưa đo lại. Mỗi bài có mục đích, cách test, phạm vi không chứ
 ## 9. Cách xem lại kết quả
 
 - Mục đích, cách test và bảng kết quả từng bài: [TEST_LOG.md](TEST_LOG.md).
-- Dữ liệu thô sẽ nằm ở `docs/results/` và `docs/evidence/` sau khi đo.
+- Số liệu nằm ở `docs/results/`.
 - Kịch bản chạy demo trực tiếp: [DEMO.md](DEMO.md).

@@ -1,0 +1,17 @@
+# target
+target node=ip-10-0-43-172.ap-southeast-1.compute.internal instance=i-093cbbc31ff7a72e3
+
+# markers
+14:00:59,terminate i-093cbbc31ff7a72e3
+shutting-down
+14:02:46,end
+
+# summary
+api: 143 requests, 0 not HTTP 200
+fe: 151 requests, 5 not HTTP 200
+
+# karpenter (interruption / deleted nodeclaim)
+2026-11-02T06:27:08.158Z  deleted nodeclaim
+2026-11-02T06:27:23.111Z  deleted nodeclaim
+2026-11-02T07:01:01.317Z  initiating delete from interruption message
+2026-11-02T07:02:18.286Z  deleted nodeclaim

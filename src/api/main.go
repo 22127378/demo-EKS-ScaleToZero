@@ -47,7 +47,6 @@ type server struct {
 	node     string
 	queueURL string
 	sqs      sender
-	waker    waker   // starts a worker Job right after a message is queued; nil when not configured
 	db       visitor // nil when no database is configured
 	st       store   // the recruitment data, nil when no database is configured
 }
@@ -82,13 +81,12 @@ func main() {
 			os.Exit(1)
 		}
 		s.sqs = sqs.NewFromConfig(cfg)
-		s.waker = newWakerFromEnv()
 	}
 
 	// Assign only when configured: a nil *db.DB stored in an interface would not compare equal to nil.
 	if d := db.New(); d != nil {
 		s.db = d
-		s.st = pgStore{d: d}
+		s.st = newCachedStats(pgStore{d: d}, statsCacheTTL())
 	}
 
 	srv := &http.Server{
@@ -249,7 +247,6 @@ func (s *server) jobs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.wakeWorker()
 	writeJSON(w, http.StatusAccepted, map[string]any{"enqueued": sent})
 }
 
@@ -298,4 +295,13 @@ func firstNonEmpty(vals ...string) string {
 func hostname() string {
 	h, _ := os.Hostname()
 	return h
+}
+
+// statsCacheTTL reads STATS_CACHE_SECONDS; unset or invalid means no caching.
+func statsCacheTTL() time.Duration {
+	n, err := strconv.Atoi(os.Getenv("STATS_CACHE_SECONDS"))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return time.Duration(n) * time.Second
 }

@@ -97,6 +97,44 @@ func collect[T any](ctx context.Context, p *pgxpool.Pool, scan func(pgx.Row) (T,
 	return out, mapErr(rows.Err())
 }
 
+// rowWithTotal lets an existing scan function read one extra trailing column (the window total).
+type rowWithTotal struct {
+	pgx.Row
+	total *int
+}
+
+func (r rowWithTotal) Scan(dest ...any) error { return r.Row.Scan(append(dest, r.total)...) }
+
+// collectPage runs a list query whose select list ends with "count(*) OVER ()", so one round trip
+// returns the page and the total. An empty page past the end has no row to carry the total, so the
+// caller's countSQL is used only in that case.
+func collectPage[T any](ctx context.Context, p *pgxpool.Pool, scan func(pgx.Row) (T, error), offset int,
+	countSQL string, countArgs []any, sql string, args ...any) ([]T, int, error) {
+	rows, err := p.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, 0, mapErr(err)
+	}
+	defer rows.Close()
+	out := []T{}
+	total := 0
+	for rows.Next() {
+		v, err := scan(rowWithTotal{Row: rows, total: &total})
+		if err != nil {
+			return nil, 0, err
+		}
+		out = append(out, v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, mapErr(err)
+	}
+	if len(out) == 0 && offset > 0 {
+		if err := p.QueryRow(ctx, countSQL, countArgs...).Scan(&total); err != nil {
+			return nil, 0, mapErr(err)
+		}
+	}
+	return out, total, nil
+}
+
 func deleteByID(ctx context.Context, p *pgxpool.Pool, table string, id int64) error {
 	tag, err := p.Exec(ctx, `DELETE FROM `+table+` WHERE id = $1`, id)
 	if err != nil {
@@ -136,13 +174,10 @@ func (s pgStore) ListApplicants(ctx context.Context, f applicantFilter) ([]appli
 		return nil, 0, err
 	}
 	pat := likePattern(f.Q)
-	var total int
-	if err := p.QueryRow(ctx, `SELECT count(*) FROM applicants WHERE `+applicantWhere, pat).Scan(&total); err != nil {
-		return nil, 0, mapErr(err)
-	}
-	items, err := collect(ctx, p, scanApplicant,
-		`SELECT `+applicantCols+` FROM applicants WHERE `+applicantWhere+` ORDER BY id LIMIT $2 OFFSET $3`, pat, f.Limit, f.Offset)
-	return items, total, err
+	return collectPage(ctx, p, scanApplicant, f.Offset,
+		`SELECT count(*) FROM applicants WHERE `+applicantWhere, []any{pat},
+		`SELECT `+applicantCols+`, count(*) OVER () FROM applicants WHERE `+applicantWhere+` ORDER BY id LIMIT $2 OFFSET $3`,
+		pat, f.Limit, f.Offset)
 }
 
 func (s pgStore) UpdateApplicant(ctx context.Context, id int64, in applicantInput) (applicant, error) {
@@ -190,14 +225,10 @@ func (s pgStore) ListPositions(ctx context.Context, f positionFilter) ([]positio
 	if err != nil {
 		return nil, 0, err
 	}
-	var total int
-	if err := p.QueryRow(ctx, `SELECT count(*) FROM positions WHERE `+positionWhere, f.Department, f.Status).Scan(&total); err != nil {
-		return nil, 0, mapErr(err)
-	}
-	items, err := collect(ctx, p, scanPosition,
-		`SELECT `+positionCols+` FROM positions WHERE `+positionWhere+` ORDER BY id LIMIT $3 OFFSET $4`,
+	return collectPage(ctx, p, scanPosition, f.Offset,
+		`SELECT count(*) FROM positions WHERE `+positionWhere, []any{f.Department, f.Status},
+		`SELECT `+positionCols+`, count(*) OVER () FROM positions WHERE `+positionWhere+` ORDER BY id LIMIT $3 OFFSET $4`,
 		f.Department, f.Status, f.Limit, f.Offset)
-	return items, total, err
 }
 
 func (s pgStore) UpdatePosition(ctx context.Context, id int64, in positionInput) (position, error) {
@@ -264,15 +295,10 @@ func (s pgStore) ListApplications(ctx context.Context, f applicationFilter) ([]a
 	if err != nil {
 		return nil, 0, err
 	}
-	var total int
-	if err := p.QueryRow(ctx, `SELECT count(*) FROM applications WHERE `+applicationWhere,
-		f.Status, f.ApplicantID, f.PositionID).Scan(&total); err != nil {
-		return nil, 0, mapErr(err)
-	}
-	items, err := collect(ctx, p, scanApplication,
-		`SELECT `+applicationCols+` FROM applications WHERE `+applicationWhere+` ORDER BY id LIMIT $4 OFFSET $5`,
+	return collectPage(ctx, p, scanApplication, f.Offset,
+		`SELECT count(*) FROM applications WHERE `+applicationWhere, []any{f.Status, f.ApplicantID, f.PositionID},
+		`SELECT `+applicationCols+`, count(*) OVER () FROM applications WHERE `+applicationWhere+` ORDER BY id LIMIT $4 OFFSET $5`,
 		f.Status, f.ApplicantID, f.PositionID, f.Limit, f.Offset)
-	return items, total, err
 }
 
 func (s pgStore) SetApplicationStatus(ctx context.Context, id int64, to string) (application, error) {

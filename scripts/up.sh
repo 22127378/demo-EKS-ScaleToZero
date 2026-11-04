@@ -20,7 +20,7 @@ for arg in "$@"; do
     *) echo "ERROR: unknown option '$arg'" >&2; exit 2 ;;
   esac
 done
-tag="${TAG:-0.3.0}"
+tag="${TAG:-0.5.2}"
 
 say "1/5 Pre-flight checks"
 "$root/scripts/check-prereqs.sh" "$region" || [[ $? -eq 1 ]] || exit 2   # exit 1 = some check failed: show it, let terraform decide

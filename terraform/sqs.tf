@@ -50,7 +50,8 @@ module "worker_pod_identity" {
   }
 }
 
-# KEDA's operator reads the queue length to decide how many workers to run.
+# KEDA's operator reads the queue length to decide how many workers to run, and the number of queued screenings
+# from the database (the worker ScaledJob's postgresql trigger), which needs the database password.
 module "keda_pod_identity" {
   source  = "terraform-aws-modules/eks-pod-identity/aws"
   version = "~> 1.12"
@@ -63,6 +64,11 @@ module "keda_pod_identity" {
       sid       = "ReadQueueLength"
       actions   = ["sqs:GetQueueAttributes"]
       resources = [aws_sqs_queue.jobs.arn]
+    },
+    {
+      sid       = "ReadDatabaseSecret"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [aws_rds_cluster.aurora.master_user_secret[0].secret_arn]
     },
   ]
 

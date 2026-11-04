@@ -1,0 +1,14 @@
+# Bai 1: API scale to zero, 2026-11-03
+scaledownPeriod: 300s, image: 728384804953.dkr.ecr.ap-southeast-1.amazonaws.com/demo-api:0.5.2
+api pods before request: 0
+14:26:29 request 1: http=200 total=3.460759s
+14:26:33 request 2: http=200 total=0.147466s
+14:26:35 last request sent (scale-down timer starts here)
+14:26:36 api pods (not terminating): 1
+14:31:46 api pods (not terminating): 0
+14:31:46 reached 0 pods, 311 s after the last request
+--- KEDA events
+45m         Normal    KEDAScaleTargetActivated       scaledobject/api                       Scaled apps/v1.Deployment demo/api from 0 to 1, triggered by s0-http-demo_002Fapi
+40m         Normal    KEDAScaleTargetDeactivated     scaledobject/api                       Deactivated apps/v1.Deployment demo/api from 1 to 0
+5m17s       Normal    KEDAScaleTargetActivated       scaledobject/api                       Scaled apps/v1.Deployment demo/api from 0 to 1, triggered by s0-http-demo_002Fapi
+5s          Normal    KEDAScaleTargetDeactivated     scaledobject/api                       Deactivated apps/v1.Deployment demo/api from 1 to 0

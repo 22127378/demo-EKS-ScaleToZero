@@ -1,0 +1,19 @@
+# Fake backlog: 3 applications marked 'queued' in the database with NO message in SQS
+No resources found in demo namespace.
+
+aws: [ERROR]: An error occurred (AWS.SimpleQueueService.NonExistentQueue) when calling the GetQueueAttributes operation: The specified queue does not exist.
+polling: 30s; Jobs before: 0; SQS messages: 
+14:31:25 marked queued: ids=2,3,4
+14:31:36 new Job: worker-n4mkb|2026-11-03T07:31:32Z|
+14:32:04 new Job: worker-fcnkx|2026-11-03T07:32:02Z|
+14:32:35 new Job: worker-dkt97|2026-11-03T07:32:32Z|
+14:33:04 new Job: worker-25gzx|2026-11-03T07:33:02Z|
+14:33:35 new Job: worker-dg64s|2026-11-03T07:33:32Z|
+14:34:04 new Job: worker-gqrrr|2026-11-03T07:34:02Z|
+14:34:33 new Job: worker-2wzcp|2026-11-03T07:34:32Z|
+14:34:57 restoring rows to 'none'
+UPDATE 3
+queued rows left: 0
+14:36:33 after restore: Jobs listed before wait=4, new Jobs in the 75 s after restore:
+  worker-4klbb|2026-11-03T07:35:02Z
+14:36:34 done; total Jobs seen while rows were queued: 7

@@ -87,12 +87,6 @@ ingress:
 #   hpa  : HPA on CPU
 #   http : KEDA HTTP Add-on (scales to zero, ingress goes through the interceptor)
 #   sqs  : KEDA on SQS queue length
-# Start worker Jobs from this app right after it queues a message (see src/api/wake.go). Needs the app to read
-# WAKE_SCALEDJOB / WAKE_MAX_ACTIVE from env; this block only grants the permissions.
-wake:
-  enabled: false
-  scaledJob: worker
-
 scaling:
   mode: hpa
   hpa:
@@ -134,6 +128,15 @@ scaling:
     ttlSecondsAfterFinished: 120
     successfulJobsHistoryLimit: 3
     failedJobsHistoryLimit: 5
+    # Second trigger: count queued screenings in the database (see templates/scaledjob-sqs.yaml). Off unless host is set.
+    postgres:
+      enabled: false
+      host: ""                  # Aurora cluster endpoint (scripts/deploy-apps.sh fills it in)
+      port: 5432
+      dbName: demo
+      sslmode: require
+      secretARN: ""             # Secrets Manager secret with the database user and password (deploy-apps.sh fills it in)
+      query: "SELECT count(*) FROM applications WHERE screening_status = 'queued'"
   sqs:
     queueURL: ""
     region: ap-southeast-1

@@ -1,0 +1,36 @@
+13:24:08 default nodes before: 2
+13:24:15 created deployment
+Waiting for deployment "karpenter-probe" rollout to finish: 1 of 5 updated replicas are available...
+13:24:15 nodes=2 ready_pods=1
+13:24:23 nodes=2 ready_pods=1
+13:24:30 nodes=2 ready_pods=1
+13:24:39 nodes=4 ready_pods=1
+13:24:46 nodes=4 ready_pods=1
+Waiting for deployment "karpenter-probe" rollout to finish: 2 of 5 updated replicas are available...
+Waiting for deployment "karpenter-probe" rollout to finish: 3 of 5 updated replicas are available...
+Waiting for deployment "karpenter-probe" rollout to finish: 4 of 5 updated replicas are available...
+deployment "karpenter-probe" successfully rolled out
+13:24:52 rollout done after 37 s
+13:24:54 nodes=4 ready_pods=5
+13:25:02 nodes=4 ready_pods=5
+13:25:09 nodes=4 ready_pods=0
+13:25:18 deleted namespace
+13:25:17 nodes=4 ready_pods=0
+13:25:25 nodes=4 ready_pods=0
+13:25:32 nodes=4 ready_pods=0
+13:25:39 nodes=4 ready_pods=0
+13:25:47 nodes=4 ready_pods=0
+13:25:54 nodes=4 ready_pods=0
+13:26:01 nodes=4 ready_pods=0
+13:26:08 nodes=4 ready_pods=0
+13:26:16 nodes=4 ready_pods=0
+13:26:23 nodes=4 ready_pods=0
+13:26:30 nodes=4 ready_pods=0
+13:26:38 nodes=4 ready_pods=0
+13:26:45 nodes=4 ready_pods=0
+13:26:53 nodes=4 ready_pods=0
+13:27:00 nodes=4 ready_pods=0
+13:27:07 nodes=3 ready_pods=0
+13:27:15 nodes=3 ready_pods=0
+13:27:23 default nodes back to 2 after 126 s
+done

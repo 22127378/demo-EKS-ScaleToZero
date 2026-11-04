@@ -3,13 +3,14 @@
 #
 # Usage: scripts/deploy-apps.sh [install|uninstall]      (default: install)
 #
-# Database and queue addresses are read from `terraform output` (local state, no AWS call). If
-# they are missing the matching features are simply left unconfigured and a note is printed.
+# Database and queue addresses are read from `terraform output` (local state, no AWS call), or from
+# QUEUE_URL, DB_ENDPOINT, DB_NAME and DB_SECRET_ARN when set (the CD workflow has no Terraform state).
+# If they are missing the matching features are simply left unconfigured and a note is printed.
 #
 # Environment:
 #   AWS_REGION     default ap-southeast-1
 #   NAMESPACE      default demo
-#   TAG            image tag, default 0.3.0
+#   TAG            image tag, default 0.5.2
 #   INBOUND_CIDRS  CIDR allowed to reach the ALB. Default: this machine's public IP as a /32.
 #                  Set to 0.0.0.0/0 to open the ALB to the internet.
 #   API_SCALEDOWN  seconds without requests before the API scales to zero (default: from the
@@ -19,7 +20,7 @@ set -euo pipefail
 action="${1:-install}"
 region="${AWS_REGION:-ap-southeast-1}"
 ns="${NAMESPACE:-demo}"
-tag="${TAG:-0.3.0}"
+tag="${TAG:-0.5.2}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [[ "$action" == "uninstall" ]]; then
@@ -48,16 +49,16 @@ deploy() { # name image [extra helm args...]
   local name="$1" image="$2"; shift 2
   helm upgrade --install "$name" "$root/charts/app" -n "$ns" -f "$root/apps/$name.values.yaml" \
     --set "image.repository=$registry/$image" --set "image.tag=$tag" \
-    --set-string "ingress.inboundCidrs=$cidr" "$@" --force-conflicts --wait --timeout 5m
+    --set-string "ingress.inboundCidrs=${cidr//,/\\,}" "$@" --force-conflicts --wait --timeout 5m
 }
 
 # Addresses created by Terraform (empty when that part is not deployed).
 outputs="$(terraform -chdir="$root/terraform" output -json 2>/dev/null || echo '{}')"
 tfval() { jq -r --arg k "$1" '.[$k].value // empty' <<<"$outputs"; }
-queue_url="$(tfval queue_url)"
-db_endpoint="$(tfval db_endpoint)"
-db_name="$(tfval db_name)"
-db_secret="$(tfval db_secret_arn)"
+queue_url="${QUEUE_URL:-$(tfval queue_url)}"
+db_endpoint="${DB_ENDPOINT:-$(tfval db_endpoint)}"
+db_name="${DB_NAME:-$(tfval db_name)}"
+db_secret="${DB_SECRET_ARN:-$(tfval db_secret_arn)}"
 
 api_extra=()
 [[ -n "${API_SCALEDOWN:-}" ]] && api_extra+=(--set "scaling.http.scaledownPeriod=$API_SCALEDOWN")
@@ -78,7 +79,9 @@ if [[ -n "$queue_url" ]]; then
   worker_extra=(--set-string "env.QUEUE_URL=$queue_url" --set-string "scaling.sqsjob.queueURL=$queue_url")
   # The worker writes screening results to the database.
   if [[ -n "$db_endpoint" && -n "$db_secret" ]]; then
-    worker_extra+=(--set-string "env.DB_HOST=$db_endpoint" --set-string "env.DB_NAME=$db_name" --set-string "env.DB_SECRET_ARN=$db_secret")
+    worker_extra+=(--set-string "env.DB_HOST=$db_endpoint" --set-string "env.DB_NAME=$db_name" --set-string "env.DB_SECRET_ARN=$db_secret"
+                   --set-string "scaling.sqsjob.postgres.host=$db_endpoint" --set-string "scaling.sqsjob.postgres.dbName=$db_name"
+                   --set-string "scaling.sqsjob.postgres.secretARN=$db_secret")
   fi
   deploy worker demo-worker "${worker_extra[@]}"
 fi

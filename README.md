@@ -33,7 +33,7 @@ Chi tiết thiết kế, quyết định và các đánh đổi: [PLAN.md](PLAN.
 | Mất node chứa pod FE duy nhất | 1,3% request lỗi trong 8 giây, tự hồi phục |
 | Cắm image bất kỳ | nginx (cổng 80), echo server, image chỉ amd64 đều chạy bằng cùng chart |
 
-Số liệu thô: [docs/results/](docs/results/) và [docs/evidence/](docs/evidence/).
+Số liệu thô: [docs/results/](docs/results/).
 
 **Giới hạn cần biết:** đo từ một máy, nên số đo đầu-cuối gồm cả độ trễ mạng của máy đó; mất node mới thử 1 lần và ở
 dạng kill đột ngột; chưa thử mất node system (nơi chạy interceptor); Route 53 chưa làm (cần domain). API đã có **32

@@ -1,0 +1,17 @@
+# Image manifests in ECR (tag 0.5.1): which CPU architectures each image has
+demo-api    : linux/amd64, linux/arm64
+demo-web    : amd64, arm64
+demo-worker : linux/amd64, linux/arm64
+(the "unknown/unknown" entries are build attestation manifests, not platforms)
+
+# Forced onto arm64 (helm upgrade --set arch=arm64), then set back to arch=auto, 2/11/2026
+api arch=arm64 set
+fe arch=arm64 set
+--- api
+request: http=200 total=2.438708s
+api pod on: ip-10-0-7-94.ap-southeast-1.compute.internal arm64
+--- fe
+deployment "fe" successfully rolled out
+fe request: http=200 total=0.138483s
+fe pod on: ip-10-0-7-94.ap-southeast-1.compute.internal arm64
+# worker: not re-measured with the warm-worker design (the image has an arm64 manifest, see above)

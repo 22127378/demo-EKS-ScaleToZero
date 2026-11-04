@@ -1,0 +1,67 @@
+13:28:31 installed
+13:28:32 load started (150 s)
+13:28:32 target=cpu: replicas=0 pods=1
+13:28:39 target=cpu: replicas=0 pods=1
+13:28:46 target=cpu: replicas=1 pods=1
+13:28:54 target=cpu: replicas=1 pods=1
+13:29:02 target=cpu: replicas=1 pods=2
+13:29:09 target=cpu: replicas=1 pods=2
+13:29:17 target=cpu: replicas=2 pods=3
+13:29:24 target=cpu: replicas=2 pods=3
+13:29:31 target=cpu: replicas=3 pods=3
+13:29:39 target=cpu: replicas=3 pods=3
+13:29:46 target=cpu: replicas=3 pods=3
+13:29:53 target=cpu: replicas=3 pods=3
+13:30:01 target=cpu: replicas=3 pods=3
+13:30:08 target=cpu: replicas=3 pods=3
+13:30:15 target=cpu: replicas=3 pods=3
+13:30:22 target=cpu: replicas=3 pods=3
+13:30:29 target=cpu: replicas=3 pods=3
+13:30:38 target=cpu: replicas=3 pods=3
+13:30:46 target=cpu: replicas=3 pods=3
+13:30:53 target=cpu: replicas=3 pods=3
+13:31:02 target=cpu: replicas=3 pods=3
+13:31:09 target=cpu: replicas=3 pods=3
+13:31:16 target=cpu: replicas=3 pods=3
+13:31:23 target=cpu: replicas=3 pods=3
+13:31:31 target=cpu: replicas=3 pods=3
+13:31:38 target=cpu: replicas=3 pods=3
+13:31:46 target=cpu: replicas=3 pods=3
+13:31:54 target=cpu: replicas=3 pods=3
+13:32:02 target=cpu: replicas=3 pods=3
+13:32:10 target=cpu: replicas=3 pods=3
+13:32:18 target=cpu: replicas=3 pods=1
+13:32:26 target=cpu: replicas=3 pods=1
+13:32:35 target=cpu: replicas=1 pods=1
+13:32:42 target=cpu: replicas=1 pods=1
+13:32:49 target=cpu: replicas=1 pods=1
+13:32:56 target=cpu: replicas=1 pods=1
+13:33:04 target=cpu: replicas=1 pods=1
+13:33:11 target=cpu: replicas=1 pods=1
+13:33:18 target=cpu: replicas=1 pods=1
+13:33:25 target=cpu: replicas=1 pods=1
+13:33:33 target=cpu: replicas=1 pods=1
+13:33:40 target=cpu: replicas=1 pods=1
+13:33:48 target=cpu: replicas=1 pods=1
+13:33:56 target=cpu: replicas=1 pods=1
+13:34:03 target=cpu: replicas=1 pods=1
+13:34:11 target=cpu: replicas=1 pods=1
+13:34:18 target=cpu: replicas=1 pods=1
+13:34:25 target=cpu: replicas=1 pods=1
+13:34:32 target=cpu: replicas=1 pods=1
+13:34:39 target=cpu: replicas=1 pods=1
+13:34:46 target=cpu: replicas=1 pods=1
+13:35:14 target=cpu: replicas=1 pods=1
+13:35:41 target=cpu: replicas=1 pods=1
+13:35:48 target=cpu: replicas=1 pods=1
+13:35:56 target=cpu: replicas=1 pods=1
+13:36:03 target=cpu: replicas=1 pods=1
+Events:
+  Type     Reason                        Age    From                       Message
+  ----     ------                        ----   ----                       -------
+  Warning  FailedGetResourceMetric       7m24s  horizontal-pod-autoscaler  failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedComputeMetricsReplicas  7m24s  horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Normal   SuccessfulRescale             7m9s   horizontal-pod-autoscaler  New size: 2; reason: cpu resource utilization (percentage of request) above target
+  Normal   SuccessfulRescale             6m54s  horizontal-pod-autoscaler  New size: 3; reason: cpu resource utilization (percentage of request) above target
+  Normal   SuccessfulRescale             3m54s  horizontal-pod-autoscaler  New size: 1; reason: All metrics below target
+done

@@ -2,7 +2,7 @@
 # The image repository is set by scripts/deploy-apps.sh (it contains the AWS account id).
 image:
   repository: demo-web
-  tag: 0.3.3
+  tag: 0.5.2
 arch: auto
 containerPort: 80
 probe:
