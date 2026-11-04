@@ -17,9 +17,10 @@ import (
 // A message that fails is not deleted: SQS hands it out again after the visibility timeout.
 func runOnce(ctx context.Context, q queue, queueURL string, batch, waitSeconds int32, processTime time.Duration, sc screener) int {
 	out, err := q.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
-		QueueUrl:            aws.String(queueURL),
-		MaxNumberOfMessages: batch,
-		WaitTimeSeconds:     waitSeconds,
+		QueueUrl:                    aws.String(queueURL),
+		MaxNumberOfMessages:         batch,
+		WaitTimeSeconds:             waitSeconds,
+		MessageSystemAttributeNames: receiveAttrs,
 	})
 	if err != nil || len(out.Messages) == 0 {
 		return 0 // nothing to do (another Job took them first) or the queue is unreachable

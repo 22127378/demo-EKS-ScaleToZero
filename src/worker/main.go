@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -34,6 +35,26 @@ type queue interface {
 // was found for the application.
 type screener interface {
 	Screen(ctx context.Context, applicationID int64) (bool, error)
+	// FailScreening ends a queued screening as 'failed' with a reason (used on the last delivery attempt).
+	FailScreening(ctx context.Context, applicationID int64, reason string) (bool, error)
+}
+
+// receiveAttrs asks SQS to tell us how often it has handed a message out.
+var receiveAttrs = []types.MessageSystemAttributeName{types.MessageSystemAttributeNameApproximateReceiveCount}
+
+// receiveCount is how many times SQS has delivered this message (1 on the first delivery).
+func receiveCount(m types.Message) int {
+	n, _ := strconv.Atoi(m.Attributes[string(types.MessageSystemAttributeNameApproximateReceiveCount)])
+	return n
+}
+
+// maxReceive is the last delivery attempt. It must equal maxReceiveCount in the queue's redrive policy
+// (terraform/sqs.tf): after that many deliveries the message goes to the dead-letter queue.
+func maxReceive() int {
+	if n, err := strconv.Atoi(os.Getenv("MAX_RECEIVE")); err == nil && n > 0 {
+		return n
+	}
+	return 8
 }
 
 // screenJob is the message the API queues for POST /applications/{id}/screen.
@@ -114,9 +135,10 @@ func run(ctx context.Context, q queue, queueURL string, processTime time.Duratio
 
 	for ctx.Err() == nil {
 		out, err := q.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
-			QueueUrl:            aws.String(queueURL),
-			MaxNumberOfMessages: 10,
-			WaitTimeSeconds:     20, // long polling
+			QueueUrl:                    aws.String(queueURL),
+			MaxNumberOfMessages:         10,
+			WaitTimeSeconds:             20, // long polling
+			MessageSystemAttributeNames: receiveAttrs,
 		})
 		if err != nil {
 			if ctx.Err() != nil {
@@ -160,7 +182,14 @@ func handle(q queue, queueURL string, m types.Message, processTime time.Duration
 		}
 		found, err := sc.Screen(ctx, job.ApplicationID)
 		if err != nil {
-			slog.Error("screening failed", "err", err, "applicationId", job.ApplicationID)
+			slog.Error("screening failed", "err", err, "applicationId", job.ApplicationID, "attempt", receiveCount(m))
+			// On the last delivery the message is about to move to the dead-letter queue. Mark the application
+			// 'failed' now, otherwise it would stay 'queued' forever with nobody looking at it.
+			if receiveCount(m) >= maxReceive() {
+				if _, ferr := sc.FailScreening(ctx, job.ApplicationID, err.Error()); ferr != nil {
+					slog.Error("could not mark the screening as failed", "err", ferr, "applicationId", job.ApplicationID)
+				}
+			}
 			return
 		}
 		if !found {

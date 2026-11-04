@@ -54,7 +54,7 @@ const (
 	applicantCols   = `id, name, email, phone, skills, created_at, updated_at`
 	positionCols    = `id, title, department, location, status, created_at, updated_at`
 	applicationCols = `id, applicant_id, position_id, status, screening_status, screening_score,
-		screening_requested_at, screening_done_at, created_at, updated_at`
+		screening_requested_at, screening_done_at, screening_error, created_at, updated_at`
 )
 
 func scanApplicant(row pgx.Row) (applicant, error) {
@@ -75,7 +75,7 @@ func scanPosition(row pgx.Row) (position, error) {
 func scanApplication(row pgx.Row) (application, error) {
 	var a application
 	err := row.Scan(&a.ID, &a.ApplicantID, &a.PositionID, &a.Status, &a.ScreeningStatus, &a.ScreeningScore,
-		&a.ScreeningRequestedAt, &a.ScreeningDoneAt, &a.CreatedAt, &a.UpdatedAt)
+		&a.ScreeningRequestedAt, &a.ScreeningDoneAt, &a.ScreeningError, &a.CreatedAt, &a.UpdatedAt)
 	return a, mapErr(err)
 }
 
@@ -356,7 +356,7 @@ func (s pgStore) RequestScreening(ctx context.Context, id int64) (application, e
 	}
 	a, err := scanApplication(tx.QueryRow(ctx,
 		`UPDATE applications SET screening_status = 'queued', screening_requested_at = now(),
-		   screening_score = NULL, screening_done_at = NULL, updated_at = now()
+		   screening_score = NULL, screening_done_at = NULL, screening_error = NULL, updated_at = now()
 		 WHERE id = $1 RETURNING `+applicationCols, id))
 	if err != nil {
 		return application{}, err

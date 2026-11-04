@@ -4,7 +4,6 @@ package db
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -13,9 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -50,34 +47,10 @@ func envInt(name string, def int) int {
 	return def
 }
 
-// credentials returns the database user and password. On AWS they come from the Secrets Manager
-// secret that RDS manages (DB_SECRET_ARN); locally from DB_USER and DB_PASSWORD.
-func credentials(ctx context.Context) (string, string, error) {
-	arn := os.Getenv("DB_SECRET_ARN")
-	if arn == "" {
-		return os.Getenv("DB_USER"), os.Getenv("DB_PASSWORD"), nil
-	}
-	cfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		return "", "", fmt.Errorf("load aws config: %w", err)
-	}
-	out, err := secretsmanager.NewFromConfig(cfg).GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: aws.String(arn)})
-	if err != nil {
-		return "", "", fmt.Errorf("read secret: %w", err)
-	}
-	var s struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	if err := json.Unmarshal([]byte(aws.ToString(out.SecretString)), &s); err != nil {
-		return "", "", fmt.Errorf("parse secret: %w", err)
-	}
-	return s.Username, s.Password, nil
-}
-
 // connect builds the pool and makes sure the schema exists. Caller holds d.mu.
 func (d *DB) connect(ctx context.Context) error {
-	user, pass, err := credentials(ctx)
+	creds := newCredProvider(credentials, credTTL)
+	user, pass, err := creds.get(ctx)
 	if err != nil {
 		return err
 	}
@@ -95,6 +68,16 @@ func (d *DB) connect(ctx context.Context) error {
 		return fmt.Errorf("parse db config: %w", err)
 	}
 	// Aurora stays on (no auto-pause), so a couple of warm connections are kept per pod.
+	// Every new connection asks for the password again, so a password rotated by RDS is picked up
+	// without restarting the pod.
+	cfg.BeforeConnect = func(ctx context.Context, cc *pgx.ConnConfig) error {
+		u, p, err := creds.get(ctx)
+		if err != nil {
+			return err
+		}
+		cc.User, cc.Password = u, p
+		return nil
+	}
 	cfg.MaxConns = int32(envInt("DB_MAX_CONNS", 10))
 	cfg.MinConns = int32(envInt("DB_MIN_CONNS", 1))
 	cfg.MaxConnIdleTime = 5 * time.Minute

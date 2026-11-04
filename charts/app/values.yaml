@@ -136,7 +136,9 @@ scaling:
       dbName: demo
       sslmode: require
       secretARN: ""             # Secrets Manager secret with the database user and password (deploy-apps.sh fills it in)
-      query: "SELECT count(*) FROM applications WHERE screening_status = 'queued'"
+      # Only rows queued in the last 5 minutes count: a row whose message was lost (or whose worker died) must not
+      # start empty Jobs forever. Measured without the window: 3 orphan rows started 7 empty Jobs in 3.5 minutes.
+      query: "SELECT count(*) FROM applications WHERE screening_status = 'queued' AND screening_requested_at > now() - interval '5 minutes'"
   sqs:
     queueURL: ""
     region: ap-southeast-1

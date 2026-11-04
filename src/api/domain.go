@@ -55,6 +55,7 @@ type application struct {
 	ScreeningScore       *int       `json:"screeningScore"`
 	ScreeningRequestedAt *time.Time `json:"screeningRequestedAt"`
 	ScreeningDoneAt      *time.Time `json:"screeningDoneAt"`
+	ScreeningError       *string    `json:"screeningError"`
 	CreatedAt            time.Time  `json:"createdAt"`
 	UpdatedAt            time.Time  `json:"updatedAt"`
 }

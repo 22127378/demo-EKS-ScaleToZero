@@ -11,9 +11,16 @@ import (
 )
 
 type fakeScreener struct {
-	calls []int64
-	found bool
-	err   error
+	calls   []int64
+	found   bool
+	err     error
+	failed  []string // reasons passed to FailScreening
+	failErr error
+}
+
+func (f *fakeScreener) FailScreening(_ context.Context, _ int64, reason string) (bool, error) {
+	f.failed = append(f.failed, reason)
+	return true, f.failErr
 }
 
 func (f *fakeScreener) Screen(_ context.Context, id int64) (bool, error) {
@@ -67,5 +74,46 @@ func TestDemoMessageStillWorks(t *testing.T) {
 	handle(q, "http://queue", msg(`{"seq":1,"payload":"load","from":"api"}`), 5*time.Millisecond, sc)
 	if len(sc.calls) != 0 || len(q.deleted) != 1 {
 		t.Fatalf("demo message: screener calls %v, deleted %v", sc.calls, q.deleted)
+	}
+}
+
+func msgAttempt(body string, attempt string) types.Message {
+	m := msg(body)
+	m.Attributes = map[string]string{"ApproximateReceiveCount": attempt}
+	return m
+}
+
+func TestScreenFailureOnAnEarlyAttemptDoesNotMarkFailed(t *testing.T) {
+	q := &fakeQueue{}
+	sc := &fakeScreener{err: errors.New("db down")}
+	handle(q, "http://queue", msgAttempt(`{"type":"screen","applicationId":7}`, "2"), 0, sc)
+	if len(sc.failed) != 0 {
+		t.Fatalf("marked failed on attempt 2 of %d: %v", maxReceive(), sc.failed)
+	}
+	if len(q.deleted) != 0 {
+		t.Fatalf("message deleted although screening failed: %v", q.deleted)
+	}
+}
+
+func TestScreenFailureOnTheLastAttemptMarksTheApplicationFailed(t *testing.T) {
+	q := &fakeQueue{}
+	sc := &fakeScreener{err: errors.New("db down")}
+	handle(q, "http://queue", msgAttempt(`{"type":"screen","applicationId":7}`, "8"), 0, sc)
+	if len(sc.failed) != 1 || sc.failed[0] != "db down" {
+		t.Fatalf("failed reasons = %v, want [db down]", sc.failed)
+	}
+	if len(q.deleted) != 0 {
+		t.Fatalf("message must stay for the dead-letter queue, but it was deleted: %v", q.deleted)
+	}
+}
+
+func TestMaxReceiveFromEnvironment(t *testing.T) {
+	t.Setenv("MAX_RECEIVE", "5")
+	if got := maxReceive(); got != 5 {
+		t.Fatalf("maxReceive = %d, want 5", got)
+	}
+	t.Setenv("MAX_RECEIVE", "")
+	if got := maxReceive(); got != 8 {
+		t.Fatalf("default maxReceive = %d, want 8", got)
 	}
 }
