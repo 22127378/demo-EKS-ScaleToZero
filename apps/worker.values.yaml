@@ -22,5 +22,6 @@ scaling:
     region: ap-southeast-1
     messagesPerJob: 10
     max: 20
+    pollingInterval: 1       # seconds between KEDA checks. DEMO setting: 1 s gives a cold start under 3 s but leaves extra empty Jobs; a real deployment should poll less often. Set here (not with --set) so a rebuilt cluster keeps it
     postgres:
-      enabled: true          # host and secretARN come from scripts/deploy-apps.sh
+      enabled: false         # proposal A (PostgreSQL trigger) is not approved, so it stays off; host and secretARN come from scripts/deploy-apps.sh

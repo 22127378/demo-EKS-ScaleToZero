@@ -117,3 +117,16 @@ func TestMaxReceiveFromEnvironment(t *testing.T) {
 		t.Fatalf("default maxReceive = %d, want 8", got)
 	}
 }
+
+func TestSimulatedWorkStaysInsideTheConfiguredRange(t *testing.T) {
+	t.Setenv("PROCESS_TIME_MAX", "12s")
+	for range 200 {
+		if d := simulatedWork(10 * time.Second); d < 10*time.Second || d > 12*time.Second {
+			t.Fatalf("simulatedWork = %v, want between 10s and 12s", d)
+		}
+	}
+	t.Setenv("PROCESS_TIME_MAX", "")
+	if d := simulatedWork(10 * time.Second); d != 10*time.Second {
+		t.Fatalf("without PROCESS_TIME_MAX simulatedWork = %v, want exactly 10s", d)
+	}
+}

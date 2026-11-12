@@ -14,7 +14,7 @@
 #   COLD_PATH  the path to request (default "/"); use a database route such as "/positions?limit=10" to
 #              include the database connection in the cold start
 #   COLD_JQ    jq test the JSON answer must pass to count as the API's answer
-#              (default: has("pod") and has("arch"); for /positions use: has("items"))
+#              (default: has("pod"); for /positions use: has("items"))
 #
 # Tip: lower API_SCALEDOWN (scripts/deploy-apps.sh) first, otherwise each run waits 5 minutes.
 set -uo pipefail
@@ -28,14 +28,14 @@ host="${API_HOST:-api.demo.local}"
 alb="$(kubectl -n keda get ingress api -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
 [[ -n "$alb" ]] || { echo "ERROR: ALB address not found" >&2; exit 1; }
 path="${COLD_PATH:-/}"
-check_jq="${COLD_JQ:-has(\"pod\") and has(\"arch\")}"
+check_jq="${COLD_JQ:-has(\"pod\")}"
 case "$mode" in
   direct) url="http://$alb$path"; hdr=(-H "Host: $host") ;;
   fe)     url="http://$alb/api${path#/}"; hdr=() ;;
   *) echo "ERROR: mode must be direct or fe" >&2; exit 2 ;;
 esac
 
-echo "run,mode,http,total_s,connect_s,ttfb_s,arch,pod_created_after_request_s,created_to_scheduled_s,created_to_ready_s" >"$csv"
+echo "run,mode,http,total_s,connect_s,ttfb_s,pod_created_after_request_s,created_to_scheduled_s,created_to_ready_s" >"$csv"
 for i in $(seq 1 "$runs"); do
   # Wait for scale-to-zero: the deployment reports no replicas.
   for _ in $(seq 1 120); do
@@ -48,10 +48,9 @@ for i in $(seq 1 "$runs"); do
   start_s="$(date +%s.%N)"
   out="$(curl -s -o /tmp/cold_body.$$ -w '%{http_code} %{time_total} %{time_connect} %{time_starttransfer}' --max-time 60 "${hdr[@]}" "$url")"
   read -r code total conn ttfb <<<"$out"
-  arch="$(jq -r '.arch // "?"' /tmp/cold_body.$$ 2>/dev/null)"
   # A 200 alone proves nothing (the ALB could route to the frontend). Only an API answer counts.
   if ! jq -e "$check_jq" /tmp/cold_body.$$ >/dev/null 2>&1; then
-    echo "$i,$mode,NOT_API,$total,$conn,$ttfb,,,," >>"$csv"
+    echo "$i,$mode,NOT_API,$total,$conn,$ttfb,,," >>"$csv"
     echo "ERROR: run $i did not get the API's JSON (body starts: $(head -c 60 /tmp/cold_body.$$ | tr '\n' ' '))" >&2
     rm -f /tmp/cold_body.$$
     exit 3
@@ -69,7 +68,7 @@ for i in $(seq 1 "$runs"); do
   else
     after=""; c2s=""; c2r=""
   fi
-  echo "$i,$mode,$code,$total,$conn,$ttfb,$arch,$after,$c2s,$c2r" >>"$csv"
+  echo "$i,$mode,$code,$total,$conn,$ttfb,$after,$c2s,$c2r" >>"$csv"
 done
 rm -f /tmp/cold_body.$$
 

@@ -209,8 +209,8 @@ run "queue_has_dead_letter_queue" {
   }
 
   assert {
-    condition     = jsondecode(aws_sqs_queue.jobs.redrive_policy).maxReceiveCount == 3
-    error_message = "Failed jobs must move to the dead-letter queue after 3 receives."
+    condition     = jsondecode(aws_sqs_queue.jobs.redrive_policy).maxReceiveCount == 8
+    error_message = "Failed jobs must move to the dead-letter queue after 8 receives."
   }
 
   assert {

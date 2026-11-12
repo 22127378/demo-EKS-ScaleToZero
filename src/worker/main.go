@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -104,8 +105,10 @@ func main() {
 		}
 		batch := intFromEnv("JOB_BATCH", 5, 1, 10)
 		wait := intFromEnv("JOB_WAIT_SECONDS", 2, 0, 20)
-		log.Info("job started", "queue", queueURL, "batch", batch, "processTime", processTime.String(), "screening", sc != nil)
-		n := runOnce(ctx, sqs.NewFromConfig(cfg), queueURL, batch, wait, processTime, sc)
+		// JOB_LINGER_SECONDS > 0 keeps the Job alive that long after its last delete (default 0: exit at once).
+		linger := time.Duration(intFromEnv("JOB_LINGER_SECONDS", 0, 0, 60)) * time.Second
+		log.Info("job started", "queue", queueURL, "batch", batch, "linger", linger.String(), "processTime", processTime.String(), "screening", sc != nil)
+		n := runOnce(ctx, sqs.NewFromConfig(cfg), queueURL, batch, wait, linger, processTime, sc)
 		log.Info("job finished", "messages", n)
 		return
 	}
@@ -168,7 +171,7 @@ func run(ctx context.Context, q queue, queueURL string, processTime time.Duratio
 func handle(q queue, queueURL string, m types.Message, processTime time.Duration, sc screener) {
 	start := time.Now()
 	if processTime > 0 {
-		time.Sleep(processTime) // optional stand-in for real work
+		time.Sleep(simulatedWork(processTime)) // optional stand-in for real work
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -227,4 +230,14 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// simulatedWork is how long one message "works". With PROCESS_TIME_MAX above PROCESS_TIME it is a random time
+// between the two (for experiments that need work times that differ a little), otherwise exactly processTime.
+func simulatedWork(processTime time.Duration) time.Duration {
+	hi, err := time.ParseDuration(os.Getenv("PROCESS_TIME_MAX"))
+	if err != nil || hi <= processTime {
+		return processTime
+	}
+	return processTime + time.Duration(rand.Int63n(int64(hi-processTime)+1))
 }

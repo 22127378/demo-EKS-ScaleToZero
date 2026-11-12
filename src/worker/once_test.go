@@ -12,7 +12,7 @@ func TestRunOnceProcessesTheBatchAndReturns(t *testing.T) {
 	h1, h2 := "h1", "h2"
 	q := &fakeQueue{pending: []types.Message{{ReceiptHandle: &h1}, {ReceiptHandle: &h2}}}
 
-	n := runOnce(context.Background(), q, "http://queue", 5, 0, 10*time.Millisecond, nil)
+	n := runOnce(context.Background(), q, "http://queue", 5, 0, 0, 10*time.Millisecond, nil)
 
 	if n != 2 {
 		t.Fatalf("runOnce = %d, want 2", n)
@@ -28,7 +28,7 @@ func TestRunOnceOnAnEmptyQueueReturnsZero(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	if n := runOnce(ctx, q, "http://queue", 5, 1, time.Millisecond, nil); n != 0 {
+	if n := runOnce(ctx, q, "http://queue", 5, 1, 0, time.Millisecond, nil); n != 0 {
 		t.Fatalf("runOnce = %d, want 0", n)
 	}
 }
@@ -44,5 +44,35 @@ func TestIntFromEnvClampsAndFallsBack(t *testing.T) {
 	}
 	if got := intFromEnv("X_UNSET", 3, 1, 10); got != 3 {
 		t.Fatalf("unset = %d, want 3", got)
+	}
+}
+
+func TestRunOnceLingersAfterTheLastMessageThenReturns(t *testing.T) {
+	old := lingerGrace
+	lingerGrace = 20 * time.Millisecond
+	defer func() { lingerGrace = old }()
+	h1 := "h1"
+	q := &fakeQueue{pending: []types.Message{{ReceiptHandle: &h1}}}
+
+	start := time.Now()
+	n := runOnce(context.Background(), q, "http://queue", 5, 0, 300*time.Millisecond, 0, nil)
+
+	if n != 1 || len(q.deleted) != 1 {
+		t.Fatalf("handled %d, deleted %v; want the one message handled and deleted", n, q.deleted)
+	}
+	if took := time.Since(start); took < 250*time.Millisecond {
+		t.Fatalf("returned after %v, before the 300 ms linger had passed", took)
+	}
+}
+
+func TestRunOnceWithoutLingerReturnsAtOnce(t *testing.T) {
+	h1 := "h1"
+	q := &fakeQueue{pending: []types.Message{{ReceiptHandle: &h1}}}
+
+	start := time.Now()
+	runOnce(context.Background(), q, "http://queue", 5, 0, 0, 0, nil)
+
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("took %v with linger off", took)
 	}
 }
