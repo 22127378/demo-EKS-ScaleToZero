@@ -1,0 +1,10 @@
+# REFERENCE ONLY. Not read by any script, Helm release or CI job.
+# Values the reference template scaledjob-sqs.split.yaml.tpl expects, next to apps/worker.values.yaml.
+# These are the settings of the 20-run measurement in docs/results/worker/worker-cold-start-keda-postgres-split.csv.
+scaling:
+  sqsjob:
+    pollingInterval: 1          # `worker`: postgresql trigger only
+    split:
+      enabled: true
+      safetyPollingInterval: 60 # `worker-sqs`: SQS trigger only, the safety net
+      safetyMax: 0              # 0 = same cap as `max` (20); with 20 + 20 up to 40 Jobs can run together
